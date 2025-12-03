@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { FaEye, FaEyeSlash, HiLightningBolt, FiClock, FiCreditCard, FiLifeBuoy, AiOutlineLoading3Quarters } from '../assets/Icons';
 
 function Signup() {
-  const [name, setName] = useState('');
+  const [full_name, setFull_name] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -41,7 +41,7 @@ function Signup() {
       const response = await fetch('/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password })
+        body: JSON.stringify({ full_name: fullName, email, password })
       });
       const data = await response.json();
       if (response.ok) {
@@ -60,7 +60,7 @@ function Signup() {
   return (
     <div className="min-h-screen flex">
       {/* Left Panel - Form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-gray-50">
+      <div className="flex-1 flex items-center justify-end lg:pr-80 p-8 bg-gray-50">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
@@ -79,14 +79,14 @@ function Signup() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-2">
                   Full name
                 </label>
                 <input
                   type="text"
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  id="full_name"
+                  value={full_Name}
+                  onChange={(e) => setFull_Name(e.target.value)}
                   placeholder="John Doe"
                   required
                   autoComplete="name"
@@ -235,7 +235,7 @@ function Signup() {
       </div>
 
       {/* Right Panel - Decorative */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-purple-600 via-indigo-600 to-indigo-800 relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/4 bg-gradient-to-br from-purple-600 via-indigo-600 to-indigo-800 relative overflow-hidden">
         {/* Animated background shapes */}
         <div className="absolute inset-0">
           <div className="absolute top-20 right-20 w-72 h-72 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
