@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash, HiLightningBolt, FiClock, FiCreditCard, FiLifeBuoy, AiOutlineLoading3Quarters } from '../assets/Icons';
 
 function Signup() {
+  const navigate = useNavigate();
   const [full_name, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -45,10 +46,16 @@ function Signup() {
       });
       const data = await response.json();
       if (response.ok) {
-        alert('Signup successful!');
-        // Optionally redirect or update state here
+        // Clear input fields
+        setFullName('');
+        setEmail('');
+        setPassword('');
+        setConfirmPassword('');
+        setAgreeToTerms(false);
+        // Redirect to login
+        navigate('/');
       } else {
-        alert(data.message || 'Signup failed');
+        alert(data.message || data.error || 'Signup failed');
       }
     } catch (err) {
       alert('Network error. Please try again.');
