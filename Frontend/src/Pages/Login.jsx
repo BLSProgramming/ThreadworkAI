@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash, HiLightningBolt, FiCheckCircle, FiTrendingUp, FiUsers, AiOutlineLoading3Quarters } from '../assets/Icons';
 
 function Login() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -19,10 +20,9 @@ function Login() {
       });
       const data = await response.json();
       if (response.ok) {
-        alert('Login successful!');
-        // Optionally redirect or update state here
+        navigate('/dashboard');
       } else {
-        alert(data.message || 'Login failed');
+        alert(data.message || data.error || 'Login failed');
       }
     } catch (err) {
       alert('Network error. Please try again.');
