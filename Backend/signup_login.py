@@ -19,23 +19,26 @@ def add_username():
     special_characters = ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '-', '[', ']', '{', '}', '"', ':', ';', "'",
                           '/', '?', '>', '<', '|', '=', '+']
     data = request.get_json()
-    username = data.get('username')
+    full_name = data.get('full_name')
     email = data.get('email')
     password = data.get('password')
 
+    if not full_name or not password:
+        return jsonify({"error": "Full name and password required"}), 400
+
     # Checks username validity
-    if len(username) >= 20:
+    if len(full_name) >= 20:
         return jsonify({"error": "invalid username"}), 400
 
-    for letter in username:
+    for letter in full_name:
         if letter in special_characters:
             return jsonify({"error": "invalid username"}), 400
 
     # Hashed username and password
     hashed_password = password_hash(password)
 
-    if not username or not password:
-        return jsonify({'error': 'Username and password required'}), 400
+    if not full_name or not password:
+        return jsonify({'error': 'Full name and password required'}), 400
 
     connection = get_db_connection()
     cursor = connection.cursor()
@@ -57,11 +60,11 @@ def add_username():
 
     # Hash password and insert if email is free
     cursor.execute("""
-    INSERT INTO users (username, email, password)
-    VALUES (%(username)s, %(email)s, %(password)s)
+    INSERT INTO users (full_name, email, password)
+    VALUES (%(full_name)s, %(email)s, %(password)s)
     RETURNING id
     """, {
-        'username': username,
+        'full_name': full_name,
         'email': email,
         'password': hashed_password
     })
@@ -71,4 +74,4 @@ def add_username():
     cursor.close()
     connection.close()
 
-    return jsonify({"message": f"User {username} created successfully!"}), 200
+    return jsonify({"message": f"User {full_name} created successfully!"}), 200
