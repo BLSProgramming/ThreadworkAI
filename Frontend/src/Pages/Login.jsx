@@ -11,7 +11,6 @@ function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
     try {
       const response = await fetch('/api/login', {
         method: 'POST',
@@ -21,13 +20,12 @@ function Login() {
       const data = await response.json();
       if (response.ok) {
         alert('Login successful!');
+        // Optionally redirect or update state here
       } else {
         alert(data.message || 'Login failed');
       }
     } catch (err) {
       alert('Network error. Please try again.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
