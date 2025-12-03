@@ -32,7 +32,7 @@ function Login() {
   return (
     <div className="min-h-screen flex">
       {/* Left Panel - Decorative */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-600 via-purple-600 to-purple-800 relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/4 bg-gradient-to-br from-indigo-600 via-purple-600 to-purple-800 relative overflow-hidden">
         {/* Animated background shapes */}
         <div className="absolute inset-0">
           <div className="absolute top-20 left-20 w-72 h-72 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
@@ -77,7 +77,7 @@ function Login() {
       </div>
 
       {/* Right Panel - Login Form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-gray-50">
+      <div className="flex-1 flex items-center justify-start lg:pl-80 p-8 bg-gray-50">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
