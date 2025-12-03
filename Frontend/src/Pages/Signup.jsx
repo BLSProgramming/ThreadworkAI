@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { FaEye, FaEyeSlash, HiLightningBolt, FiClock, FiCreditCard, FiLifeBuoy, AiOutlineLoading3Quarters } from '../assets/Icons';
 
 function Signup() {
-  const [full_name, setFull_name] = useState('');
+  const [full_name, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -41,7 +41,7 @@ function Signup() {
       const response = await fetch('/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ full_name: fullName, email, password })
+        body: JSON.stringify({ full_name, email, password })
       });
       const data = await response.json();
       if (response.ok) {
@@ -85,8 +85,8 @@ function Signup() {
                 <input
                   type="text"
                   id="full_name"
-                  value={full_Name}
-                  onChange={(e) => setFull_Name(e.target.value)}
+                  value={full_name}
+                  onChange={(e) => setFullName(e.target.value)}
                   placeholder="John Doe"
                   required
                   autoComplete="name"
