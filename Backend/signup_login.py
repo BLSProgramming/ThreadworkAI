@@ -23,6 +23,7 @@ def add_username():
     email = data.get('email')
     password = data.get('password')
 
+    # Checks if fields are empty
     if not full_name or not password:
         return jsonify({"error": "Full name and password required"}), 400
 
@@ -30,15 +31,13 @@ def add_username():
     if len(full_name) >= 20:
         return jsonify({"error": "invalid username"}), 400
 
+    # Checks if there are any special characters
     for letter in full_name:
         if letter in special_characters:
             return jsonify({"error": "invalid username"}), 400
 
     # Hashed username and password
     hashed_password = password_hash(password)
-
-    if not full_name or not password:
-        return jsonify({'error': 'Full name and password required'}), 400
 
     connection = get_db_connection()
     cursor = connection.cursor()
@@ -75,3 +74,50 @@ def add_username():
     connection.close()
 
     return jsonify({"message": f"User {full_name} created successfully!"}), 200
+
+@signup_routes.route('/api/login', methods=["POST"])
+def login():
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
+
+    if not email or not password:
+        return jsonify({'error': 'Full name and password required'}), 400
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        # Gets stored id and password from signup
+        cursor.execute("""
+        SELECT id, password
+        FROM users
+        WHERE email = %(email)s
+        """, {
+            'email': email
+        })
+        row = cursor.fetchone()
+
+        # If there is no username, return an error
+        if not row:
+            return jsonify({"error": "invalid full name or password"}), 401
+
+        user_id = row[0]
+        stored_hash = row[1]
+
+        # If passwords match, add the user into the accounts table
+        if check_password(password, stored_hash):
+            session['user_id'] = user_id
+            return jsonify({"message": "login successful", "user_id": user_id}), 200
+        else:
+            return jsonify({"error": "Invalid username or password"}), 401
+    except Exception as e:
+        print("Error ", e)
+        return jsonify({"error": str(e)})
+
+
+
+
+
+
+
