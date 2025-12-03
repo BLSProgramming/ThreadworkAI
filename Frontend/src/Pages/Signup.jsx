@@ -12,6 +12,25 @@ function Signup() {
   const [isLoading, setIsLoading] = useState(false);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
 
+  const getPasswordStrength = () => {
+    if (!password) return { strength: 0, label: '', color: 'bg-gray-200' };
+    
+    let strength = 0;
+    if (password.length >= 8) strength++;
+    if (/[A-Z]/.test(password)) strength++;
+    if (/[0-9]/.test(password)) strength++;
+    if (/[^A-Za-z0-9]/.test(password)) strength++;
+
+    const levels = [
+      { strength: 1, label: 'Weak', color: 'bg-red-500' },
+      { strength: 2, label: 'Fair', color: 'bg-orange-500' },
+      { strength: 3, label: 'Good', color: 'bg-yellow-500' },
+      { strength: 4, label: 'Strong', color: 'bg-green-500' },
+    ];
+
+    return levels[strength - 1] || { strength: 0, label: 'Too short', color: 'bg-gray-300' };
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (password !== confirmPassword) {
