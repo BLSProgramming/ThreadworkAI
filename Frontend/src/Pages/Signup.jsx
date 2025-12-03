@@ -18,11 +18,6 @@ function Signup() {
       alert('Passwords do not match');
       return;
     }
-    if (!agreeToTerms) {
-      alert('Please agree to the terms and conditions');
-      return;
-    }
-    setIsLoading(true);
     try {
       const response = await fetch('/api/signup', {
         method: 'POST',
@@ -32,32 +27,13 @@ function Signup() {
       const data = await response.json();
       if (response.ok) {
         alert('Signup successful!');
+        // Optionally redirect or update state here
       } else {
         alert(data.message || 'Signup failed');
       }
     } catch (err) {
       alert('Network error. Please try again.');
-    } finally {
-      setIsLoading(false);
     }
-  };
-
-  // Password strength indicator
-  const getPasswordStrength = () => {
-    if (!password) return { strength: 0, label: '', color: '' };
-    let strength = 0;
-    if (password.length >= 8) strength++;
-    if (/[A-Z]/.test(password)) strength++;
-    if (/[0-9]/.test(password)) strength++;
-    if (/[^A-Za-z0-9]/.test(password)) strength++;
-    
-    const levels = [
-      { label: 'Weak', color: 'bg-red-500' },
-      { label: 'Fair', color: 'bg-orange-500' },
-      { label: 'Good', color: 'bg-yellow-500' },
-      { label: 'Strong', color: 'bg-green-500' }
-    ];
-    return { strength, ...levels[strength - 1] || { label: '', color: '' } };
   };
 
   const passwordStrength = getPasswordStrength();
