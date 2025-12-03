@@ -25,7 +25,7 @@ function Signup() {
       <div className="bg-white rounded-2xl shadow-2xl p-12 w-full max-w-md">
         <div className="text-center mb-10">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-purple-900 bg-clip-text text-transparent mb-3 tracking-tight">
-            Allseer
+            Threadwork
           </h1>
           <p className="text-gray-500 text-base">Create your account</p>
         </div>
