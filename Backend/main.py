@@ -4,7 +4,7 @@ from signup_login import signup_routes
 import secrets
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "https://localhost:5173"}}, supports_credentials=True)
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "http://localhost:5174"]}}, supports_credentials=True)
 
 # session key to keep user logged in during session
 secret_key = secrets.token_hex(16)
