@@ -4,10 +4,17 @@ import { FaEye, FaEyeSlash, HiLightningBolt, FiClock, FiCreditCard, FiLifeBuoy, 
 
 function Signup() {
   const navigate = useNavigate();
-  const [full_name, setFullName] = useState('');
+  const [step, setStep] = useState(1);
+  
+  // Step 1 fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  
+  // Step 2 fields
+  const [full_name, setFullName] = useState('');
+  const [birth_date, setBirthDate] = useState('');
+  
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -32,17 +39,24 @@ function Signup() {
     return levels[strength - 1] || { strength: 0, label: 'Too short', color: 'bg-gray-300' };
   };
 
-  const handleSubmit = async (e) => {
+  const handleStep1Continue = (e) => {
     e.preventDefault();
     if (password !== confirmPassword) {
       alert('Passwords do not match');
       return;
     }
+    setStep(2);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+    
     try {
       const response = await fetch('/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ full_name, email, password })
+        body: JSON.stringify({ full_name, email, password, birth_date })
       });
       const data = await response.json();
       if (response.ok) {
@@ -51,6 +65,7 @@ function Signup() {
         setEmail('');
         setPassword('');
         setConfirmPassword('');
+        setBirthDate('');
         setAgreeToTerms(false);
         // Redirect to login
         navigate('/');
@@ -59,6 +74,8 @@ function Signup() {
       }
     } catch (err) {
       alert('Network error. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -77,153 +94,209 @@ function Signup() {
           </div>
 
           <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 p-10">
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                Create account
-              </h1>
-              <p className="text-gray-500">Start your journey with Threadwork</p>
+            {/* Progress Indicator */}
+            <div className="flex items-center justify-center mb-8">
+              <div className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm ${
+                  step >= 1 ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'
+                }`}>
+                  1
+                </div>
+                <div className={`w-16 h-1 ${step >= 2 ? 'bg-indigo-600' : 'bg-gray-200'}`}></div>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm ${
+                  step >= 2 ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'
+                }`}>
+                  2
+                </div>
+              </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-2">
-                  Full name
-                </label>
-                <input
-                  type="text"
-                  id="full_name"
-                  value={full_name}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="John Doe"
-                  required
-                  autoComplete="name"
-                  className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 transition-all duration-200 outline-none"
-                />
-              </div>
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                {step === 1 ? 'Create account' : 'Complete your profile'}
+              </h1>
+              <p className="text-gray-500">
+                {step === 1 ? 'Start your journey with Threadwork' : 'Tell us a bit about yourself'}
+              </p>
+            </div>
 
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                  Email address
-                </label>
-                <input
-                  type="email"
-                  id="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@company.com"
-                  required
-                  autoComplete="email"
-                  className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 transition-all duration-200 outline-none"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                  Password
-                </label>
-                <div className="relative">
+            {/* Step 1: Email and Password */}
+            {step === 1 && (
+              <form onSubmit={handleStep1Continue} className="space-y-4">
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                    Email address
+                  </label>
                   <input
-                    type={showPassword ? "text" : "password"}
-                    id="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Create a strong password"
+                    type="email"
+                    id="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@company.com"
                     required
-                    autoComplete="new-password"
-                    className="w-full px-4 py-3.5 pr-12 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 transition-all duration-200 outline-none"
+                    autoComplete="email"
+                    className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 transition-all duration-200 outline-none"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    {showPassword ? <FaEyeSlash className="w-5 h-5" /> : <FaEye className="w-5 h-5" />}
-                  </button>
                 </div>
-                {/* Password strength indicator */}
-                {password && (
-                  <div className="mt-2">
-                    <div className="flex gap-1 mb-1">
-                      {[1, 2, 3, 4].map((level) => (
-                        <div
-                          key={level}
-                          className={`h-1 flex-1 rounded-full transition-colors ${
-                            level <= passwordStrength.strength ? passwordStrength.color : 'bg-gray-200'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                    <p className={`text-xs ${passwordStrength.color.replace('bg-', 'text-')}`}>
-                      {passwordStrength.label}
-                    </p>
+
+                <div>
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      id="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Create a strong password"
+                      required
+                      autoComplete="new-password"
+                      className="w-full px-4 py-3.5 pr-12 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 transition-all duration-200 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      {showPassword ? <FaEyeSlash className="w-5 h-5" /> : <FaEye className="w-5 h-5" />}
+                    </button>
                   </div>
-                )}
-              </div>
+                  {password && (
+                    <div className="mt-2">
+                      <div className="flex gap-1 mb-1">
+                        {[1, 2, 3, 4].map((level) => (
+                          <div
+                            key={level}
+                            className={`h-1 flex-1 rounded-full transition-colors ${
+                              level <= passwordStrength.strength ? passwordStrength.color : 'bg-gray-200'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <p className={`text-xs ${passwordStrength.color.replace('bg-', 'text-')}`}>
+                        {passwordStrength.label}
+                      </p>
+                    </div>
+                  )}
+                </div>
 
-              <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
-                  Confirm password
-                </label>
-                <div className="relative">
+                <div>
+                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
+                    Confirm password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      id="confirmPassword"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm your password"
+                      required
+                      autoComplete="new-password"
+                      className={`w-full px-4 py-3.5 pr-12 bg-gray-50 border rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:ring-4 transition-all duration-200 outline-none ${
+                        confirmPassword && password !== confirmPassword
+                          ? 'border-red-300 focus:border-red-500 focus:ring-red-500/10'
+                          : 'border-gray-200 focus:border-purple-500 focus:ring-purple-500/10'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      {showConfirmPassword ? <FaEyeSlash className="w-5 h-5" /> : <FaEye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  {confirmPassword && password !== confirmPassword && (
+                    <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3.5 mt-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
+                >
+                  Continue
+                </button>
+              </form>
+            )}
+
+            {/* Step 2: Full Name and Birth Date */}
+            {step === 2 && (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-2">
+                    Full name
+                  </label>
                   <input
-                    type={showConfirmPassword ? "text" : "password"}
-                    id="confirmPassword"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm your password"
+                    type="text"
+                    id="full_name"
+                    value={full_name}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="John Doe"
                     required
-                    autoComplete="new-password"
-                    className={`w-full px-4 py-3.5 pr-12 bg-gray-50 border rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:ring-4 transition-all duration-200 outline-none ${
-                      confirmPassword && password !== confirmPassword
-                        ? 'border-red-300 focus:border-red-500 focus:ring-red-500/10'
-                        : 'border-gray-200 focus:border-purple-500 focus:ring-purple-500/10'
-                    }`}
+                    autoComplete="name"
+                    className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 transition-all duration-200 outline-none"
                   />
+                </div>
+
+                <div>
+                  <label htmlFor="birth_date" className="block text-sm font-medium text-gray-700 mb-2">
+                    Birth date
+                  </label>
+                  <input
+                    type="date"
+                    id="birth_date"
+                    value={birth_date}
+                    onChange={(e) => setBirthDate(e.target.value)}
+                    required
+                    className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 transition-all duration-200 outline-none"
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={agreeToTerms}
+                      onChange={(e) => setAgreeToTerms(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                    />
+                    <span className="text-sm text-gray-600">
+                      I agree to the{' '}
+                      <a href="#" className="text-purple-600 hover:text-purple-700">Terms of Service</a>
+                      {' '}and{' '}
+                      <a href="#" className="text-purple-600 hover:text-purple-700">Privacy Policy</a>
+                    </span>
+                  </label>
+                </div>
+
+                <div className="flex gap-3">
                   <button
                     type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                    onClick={() => setStep(1)}
+                    className="flex-1 py-3.5 mt-2 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
                   >
-                    {showConfirmPassword ? <FaEyeSlash className="w-5 h-5" /> : <FaEye className="w-5 h-5" />}
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoading || !agreeToTerms}
+                    className="flex-1 py-3.5 mt-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                  >
+                    {isLoading ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <AiOutlineLoading3Quarters className="animate-spin h-5 w-5" />
+                        Creating...
+                      </span>
+                    ) : (
+                      'Create account'
+                    )}
                   </button>
                 </div>
-                {confirmPassword && password !== confirmPassword && (
-                  <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
-                )}
-              </div>
-
-              <div className="pt-2">
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={agreeToTerms}
-                    onChange={(e) => setAgreeToTerms(e.target.checked)}
-                    className="w-4 h-4 mt-0.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
-                  />
-                  <span className="text-sm text-gray-600">
-                    I agree to the{' '}
-                    <a href="#" className="text-purple-600 hover:text-purple-700">Terms of Service</a>
-                    {' '}and{' '}
-                    <a href="#" className="text-purple-600 hover:text-purple-700">Privacy Policy</a>
-                  </span>
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading || !agreeToTerms}
-                className="w-full py-3.5 mt-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-              >
-                {isLoading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <AiOutlineLoading3Quarters className="animate-spin h-5 w-5" />
-                    Creating account...
-                  </span>
-                ) : (
-                  'Create account'
-                )}
-              </button>
-            </form>
+              </form>
+            )}
 
             <div className="mt-8 pt-6 border-t border-gray-100 text-center">
               <p className="text-gray-500">

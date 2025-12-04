@@ -20,7 +20,7 @@ function Login() {
       });
       const data = await response.json();
       if (response.ok) {
-        navigate('/dashboard');
+        navigate('/home');
       } else {
         alert(data.message || data.error || 'Login failed');
       }
