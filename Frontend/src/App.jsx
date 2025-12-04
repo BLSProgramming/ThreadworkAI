@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './Pages/Login.jsx'
 import Signup from './Pages/Signup.jsx'
-import Dashboard from './Pages/Dashboard.jsx'
+import HomePage from './Pages/HomePage.jsx'
+import Layout from './Layout.jsx'
 
 function App() {
   return (
@@ -9,7 +10,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/home" element={<Layout><HomePage /></Layout>} />
         <Route path="*" element={<Navigate to="/" replace />} />
 
       </Routes>
