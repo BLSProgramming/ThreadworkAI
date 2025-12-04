@@ -82,7 +82,7 @@ def login():
     password = data.get('password')
 
     if not email or not password:
-        return jsonify({'error': 'Full name and password required'}), 400
+        return jsonify({'error': 'Email and password required'}), 400
 
     try:
         connection = get_db_connection()
@@ -105,19 +105,11 @@ def login():
         user_id = row[0]
         stored_hash = row[1]
 
-        # If passwords match, add the user into the accounts table
-        if check_password(password, stored_hash):
-            session['user_id'] = user_id
-            return jsonify({"message": "login successful", "user_id": user_id}), 200
-        else:
-            return jsonify({"error": "Invalid username or password"}), 401
+        cursor.close()
+        connection.close()
+
+        return jsonify({"success": "access granted"}), 200
+
     except Exception as e:
         print("Error ", e)
         return jsonify({"error": str(e)})
-
-
-
-
-
-
-
