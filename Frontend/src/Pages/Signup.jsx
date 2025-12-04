@@ -241,7 +241,7 @@ function Signup() {
                   />
                 </div>
 
-                <div>
+                <div className="relative">
                   <label htmlFor="birth_date" className="block text-sm font-medium text-gray-700 mb-2">
                     Birth date
                   </label>

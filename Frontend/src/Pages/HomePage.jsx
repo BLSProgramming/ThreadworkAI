@@ -1,11 +1,53 @@
 import { useState, useRef, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { HiLightningBolt } from '../assets/Icons';
 
 function HomePage() {
+  const { chatId } = useParams();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
+
+  // Load messages for current chat
+  useEffect(() => {
+    if (chatId) {
+      const savedChats = localStorage.getItem('chats');
+      if (savedChats) {
+        const chats = JSON.parse(savedChats);
+        const currentChat = chats.find(chat => chat.id === chatId);
+        if (currentChat && currentChat.messages) {
+          setMessages(currentChat.messages);
+        } else {
+          setMessages([]);
+        }
+      }
+    } else {
+      setMessages([]);
+    }
+  }, [chatId]);
+
+  // Save messages whenever they change
+  useEffect(() => {
+    if (chatId && messages.length > 0) {
+      const savedChats = localStorage.getItem('chats');
+      if (savedChats) {
+        const chats = JSON.parse(savedChats);
+        const chatIndex = chats.findIndex(chat => chat.id === chatId);
+        if (chatIndex !== -1) {
+          chats[chatIndex].messages = messages;
+          // Update title with first message if it's still "New Chat"
+          if (chats[chatIndex].title === 'New Chat' && messages.length > 0) {
+            const firstMessage = messages.find(m => m.sender === 'user');
+            if (firstMessage) {
+              chats[chatIndex].title = firstMessage.text.substring(0, 30) + (firstMessage.text.length > 30 ? '...' : '');
+            }
+          }
+          localStorage.setItem('chats', JSON.stringify(chats));
+        }
+      }
+    }
+  }, [messages, chatId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

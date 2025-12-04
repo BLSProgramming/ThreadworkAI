@@ -77,7 +77,7 @@ function Login() {
       </div>
 
       {/* Right Panel - Login Form */}
-      <div className="flex-1 flex items-center justify-start lg:pl-80 p-8 bg-gray-50">
+      <div className="flex-1 flex items-center justify-start lg:pl-80 p-8 pt-16 bg-gray-50">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
