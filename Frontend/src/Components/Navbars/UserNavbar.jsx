@@ -12,6 +12,7 @@ function UserNavbar({ isOpen = true, onToggle }) {
   const [editingChatId, setEditingChatId] = useState(null);
   const [editTitle, setEditTitle] = useState('');
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, type: null, chatId: null });
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Load chats from localStorage on mount
   useEffect(() => {
@@ -19,12 +20,15 @@ function UserNavbar({ isOpen = true, onToggle }) {
     if (savedChats) {
       setChats(JSON.parse(savedChats));
     }
+    setIsInitialized(true);
   }, []);
 
-  // Save chats to localStorage whenever they change
+  // Save chats to localStorage whenever they change (but only after initial load)
   useEffect(() => {
-    localStorage.setItem('chats', JSON.stringify(chats));
-  }, [chats]);
+    if (isInitialized) {
+      localStorage.setItem('chats', JSON.stringify(chats));
+    }
+  }, [chats, isInitialized]);
 
   // Listen for chat updates from other components
   useEffect(() => {
