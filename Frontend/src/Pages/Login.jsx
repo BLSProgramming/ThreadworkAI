@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaEye, FaEyeSlash, HiLightningBolt, FiCheckCircle, FiTrendingUp, FiUsers, AiOutlineLoading3Quarters } from '../assets/Icons';
+import { FaEye, FaEyeSlash, HiLightningBolt, FiCheckCircle, FiTrendingUp, FiUsers, AiOutlineLoading3Quarters, IoArrowBack } from '../assets/Icons';
+
 
 function Login() {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsLoading(true);
     try {
       const response = await fetch('/api/login', {
         method: 'POST',
@@ -26,6 +28,8 @@ function Login() {
       }
     } catch (err) {
       alert('Network error. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -77,7 +81,7 @@ function Login() {
       </div>
 
       {/* Right Panel - Login Form */}
-      <div className="flex-1 flex items-center justify-start lg:pl-80 p-8 bg-gray-50">
+      <div className="flex-1 flex items-center justify-start lg:pl-80 p-8 pt-24 bg-gray-50">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
@@ -86,7 +90,15 @@ function Login() {
             </div>
           </div>
 
-          <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 p-10">
+          <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 p-10 relative">
+            {/* Back Arrow */}
+            <Link 
+              to="/" 
+              className="absolute top-6 left-6 w-10 h-10 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-all duration-200 hover:-translate-x-1"
+            >
+              <IoArrowBack className="w-5 h-5 text-gray-700" />
+            </Link>
+
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
                 Threadwork
@@ -94,6 +106,7 @@ function Login() {
               <p className="text-gray-500">Sign in to your account</p>
             </div>
 
+            {/* Email Login Form */}
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">

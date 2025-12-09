@@ -3,7 +3,7 @@ import { HiLightningBolt } from "react-icons/hi";
 import { FiCheckCircle, FiTrendingUp, FiUsers, FiClock, FiCreditCard, FiLifeBuoy } from "react-icons/fi";
 import { AiOutlinePlus, AiOutlineSetting, AiOutlineLoading3Quarters } from 'react-icons/ai';
 import { MdLogout } from "react-icons/md";
-
+import { IoArrowBack } from "react-icons/io5";
 
 export { 
   FaEye, 
@@ -18,7 +18,8 @@ export {
   FiCreditCard,
   FiLifeBuoy,
   AiOutlineLoading3Quarters,
-  MdLogout
+  MdLogout,
+  IoArrowBack
 
 
 };

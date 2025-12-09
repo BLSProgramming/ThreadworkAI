@@ -22,6 +22,7 @@ def add_username():
     full_name = data.get('full_name')
     email = data.get('email')
     password = data.get('password')
+    birth_date = data.get('birth_date')
 
     # Checks if fields are empty
     if not full_name or not password:
@@ -59,13 +60,14 @@ def add_username():
 
     # Hash password and insert if email is free
     cursor.execute("""
-    INSERT INTO users (full_name, email, password)
-    VALUES (%(full_name)s, %(email)s, %(password)s)
+    INSERT INTO users (full_name, email, password, birth_date)
+    VALUES (%(full_name)s, %(email)s, %(password)s, %(birth_date)s)
     RETURNING id
     """, {
         'full_name': full_name,
         'email': email,
-        'password': hashed_password
+        'password': hashed_password,
+        'birth_date': birth_date
     })
 
     user_id = cursor.fetchone()[0]

@@ -1,10 +1,17 @@
+import { useState } from 'react';
 import UserNavbar from './Components/Navbars/UserNavbar';
 
 function Layout({ children }) {
+  const [isNavbarOpen, setIsNavbarOpen] = useState(true);
+
+  const handleToggleNavbar = () => {
+    setIsNavbarOpen(!isNavbarOpen);
+  };
+
   return (
     <div className="flex h-screen bg-white">
       {/* Navbar */}
-      <UserNavbar />
+      <UserNavbar isOpen={isNavbarOpen} onToggle={handleToggleNavbar} />
       
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
