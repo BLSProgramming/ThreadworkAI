@@ -74,9 +74,21 @@ function HomePage() {
     );
   };
 
-  // Render text with headings, lists, inline bold, and fenced code blocks (```lang\ncode```)
+  // Render text with headings, lists, inline bold, links, YouTube embeds, and fenced code blocks
   const renderFormattedContent = (text, { headingClass = 'text-indigo-700', bulletColor = 'text-indigo-600' } = {}) => {
     if (!text) return null;
+
+    const extractYouTubeId = (url) => {
+      const patterns = [
+        /(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})/,
+        /youtube\.com\/embed\/([\w-]{11})/,
+      ];
+      for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match) return match[1];
+      }
+      return null;
+    };
 
     const renderInlineBold = (str) => {
       const parts = str.split(/(\*\*[^*]+\*\*)/g);
@@ -86,6 +98,74 @@ function HomePage() {
         }
         return part;
       });
+    };
+
+    const renderTextWithLinks = (str) => {
+      // First handle markdown links [text](url)
+      const markdownLinkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+      const withMarkdownLinks = [];
+      let lastIdx = 0;
+      let mdMatch;
+      
+      while ((mdMatch = markdownLinkRegex.exec(str)) !== null) {
+        const [fullMatch, linkText, url] = mdMatch;
+        const before = str.slice(lastIdx, mdMatch.index);
+        if (before) {
+          withMarkdownLinks.push({ type: 'text', content: before });
+        }
+        withMarkdownLinks.push({ type: 'mdlink', text: linkText, url });
+        lastIdx = mdMatch.index + fullMatch.length;
+      }
+      const remaining = str.slice(lastIdx);
+      if (remaining) {
+        withMarkdownLinks.push({ type: 'text', content: remaining });
+      }
+      
+      // If no markdown links found, treat entire string as text
+      if (withMarkdownLinks.length === 0) {
+        withMarkdownLinks.push({ type: 'text', content: str });
+      }
+      
+      // Now handle plain URLs in text segments
+      const result = [];
+      withMarkdownLinks.forEach((item, itemIdx) => {
+        if (item.type === 'mdlink') {
+          result.push(
+            <a
+              key={`mdlink-${itemIdx}`}
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline hover:text-blue-800"
+            >
+              {item.text}
+            </a>
+          );
+        } else {
+          // Handle plain URLs in text
+          const urlRegex = /(https?:\/\/[^\s]+)/g;
+          const parts = item.content.split(urlRegex);
+          parts.forEach((part, i) => {
+            if (urlRegex.test(part)) {
+              result.push(
+                <a
+                  key={`link-${itemIdx}-${i}`}
+                  href={part}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 underline hover:text-blue-800"
+                >
+                  {part}
+                </a>
+              );
+            } else {
+              result.push(<span key={`text-${itemIdx}-${i}`}>{renderInlineBold(part)}</span>);
+            }
+          });
+        }
+      });
+      
+      return result;
     };
 
     const renderLines = (block, blockIndex) => {
@@ -153,14 +233,14 @@ function HomePage() {
           return (
             <div key={key} className="ml-4 my-1 text-sm text-gray-800 flex gap-2">
               <span className={`${bulletColor} font-bold`}>•</span>
-              <span>{renderInlineBold(bulletMatch[1])}</span>
+              <span>{renderTextWithLinks(bulletMatch[1])}</span>
             </div>
           );
         }
 
         return (
           <p key={key} className="text-sm leading-relaxed text-gray-800">
-            {renderInlineBold(trimmed)}
+            {renderTextWithLinks(trimmed)}
           </p>
         );
       });
@@ -168,28 +248,75 @@ function HomePage() {
 
     const renderCodeBlock = (code, lang = 'text', key) => <CodeBlock key={key} code={code} lang={lang} />;
 
+    const renderYouTubeEmbed = (url, key) => {
+      const videoId = extractYouTubeId(url);
+      if (!videoId) return null;
+      return (
+        <div key={key} className="my-4 rounded-lg overflow-hidden border border-gray-300">
+          <iframe
+            width="100%"
+            height="315"
+            src={`https://www.youtube.com/embed/${videoId}`}
+            title="YouTube video player"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="w-full"
+          />
+        </div>
+      );
+    };
+
     const segments = [];
     const codeRegex = /```(\w+)?\n([\s\S]*?)```/g;
+    const youtubeRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11}))/g;
     let lastIndex = 0;
     let match;
 
+    // First pass: extract code blocks
+    const tempSegments = [];
     while ((match = codeRegex.exec(text)) !== null) {
       const [fullMatch, lang, code] = match;
       const before = text.slice(lastIndex, match.index);
       if (before.trim()) {
-        segments.push({ type: 'text', content: before });
+        tempSegments.push({ type: 'text', content: before });
       }
-      segments.push({ type: 'code', content: code, lang: lang || 'text' });
+      tempSegments.push({ type: 'code', content: code, lang: lang || 'text' });
       lastIndex = match.index + fullMatch.length;
     }
     const after = text.slice(lastIndex);
     if (after.trim()) {
-      segments.push({ type: 'text', content: after });
+      tempSegments.push({ type: 'text', content: after });
     }
+
+    // Second pass: extract YouTube links from text segments but keep them in text too
+    const ytUrlsGlobal = new Set();
+    tempSegments.forEach((segment) => {
+      if (segment.type === 'text') {
+        let segmentText = segment.content;
+        let ytMatch;
+        youtubeRegex.lastIndex = 0;
+        while ((ytMatch = youtubeRegex.exec(segmentText)) !== null) {
+          ytUrlsGlobal.add(ytMatch[0]);
+        }
+        // Keep the text segment intact (with URLs as clickable links)
+        segments.push({ type: 'text', content: segmentText });
+      } else {
+        segments.push(segment);
+      }
+    });
+    
+    // Add all YouTube embeds at the end to avoid duplicates
+    ytUrlsGlobal.forEach((url) => {
+      segments.push({ type: 'youtube', url });
+    });
 
     return segments.map((segment, idx) => {
       if (segment.type === 'code') {
         return renderCodeBlock(segment.content, segment.lang, `code-${idx}`);
+      }
+      if (segment.type === 'youtube') {
+        return renderYouTubeEmbed(segment.url, `youtube-${idx}`);
       }
       return <div key={`text-${idx}`}>{renderLines(segment.content, idx)}</div>;
     });
@@ -201,6 +328,81 @@ function HomePage() {
     localStorage.setItem('chats', JSON.stringify(updated));
     window.dispatchEvent(new Event('chats-updated'));
     return updated;
+  };
+
+  // Helper function to format chat data for PostgreSQL storage
+  const formatChatForDatabase = (chatId, title, messages) => {
+    return {
+      chat_id: chatId,
+      title: title,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      messages: messages.map(msg => {
+        if (msg.sender === 'user') {
+          return {
+            message_id: msg.id.toString(),
+            sender: 'user',
+            user_prompt: msg.text,
+            created_at: new Date().toISOString()
+          };
+        } else {
+          // Convert allResponses object to array and map to model1-4
+          const responses = msg.allResponses ? Object.values(msg.allResponses) : [];
+          const modelNames = msg.allResponses ? Object.keys(msg.allResponses) : [];
+          
+          return {
+            message_id: msg.id.toString(),
+            sender: 'bot',
+            user_prompt: null,
+            synthesized_response: msg.text,
+            model1_name: modelNames[0] || null,
+            model1_response: responses[0] || null,
+            model2_name: modelNames[1] || null,
+            model2_response: responses[1] || null,
+            model3_name: modelNames[2] || null,
+            model3_response: responses[2] || null,
+            model4_name: modelNames[3] || null,
+            model4_response: responses[3] || null,
+            created_at: new Date().toISOString()
+          };
+        }
+      })
+    };
+  };
+
+  // Function to save chat to database (ready for backend integration)
+  const saveChatToDatabase = async (chatId) => {
+    const chats = JSON.parse(localStorage.getItem('chats') || '[]');
+    const chat = chats.find(c => c.id === chatId);
+    
+    if (!chat) return;
+
+    const dbPayload = formatChatForDatabase(chat.id, chat.title, chat.messages);
+    
+    // Store formatted data in localStorage for now (ready for API call)
+    const dbChats = JSON.parse(localStorage.getItem('dbChats') || '[]');
+    const existingIndex = dbChats.findIndex(c => c.chat_id === chatId);
+    
+    if (existingIndex !== -1) {
+      dbChats[existingIndex] = dbPayload;
+    } else {
+      dbChats.push(dbPayload);
+    }
+    
+    localStorage.setItem('dbChats', JSON.stringify(dbChats));
+    
+    // When backend is ready, uncomment this:
+    /*
+    try {
+      await fetch('/api/chats/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dbPayload)
+      });
+    } catch (error) {
+      console.error('Failed to save chat to database:', error);
+    }
+    */
   };
 
   useEffect(() => {
@@ -239,6 +441,9 @@ function HomePage() {
         }
         return chats;
       });
+      
+      // Save formatted chat data for database
+      saveChatToDatabase(chatId);
     }
   }, [messages, chatId]);
 
@@ -309,18 +514,21 @@ function HomePage() {
             modelResponses[resp.model] = resp.response;
           });
 
+          // Build allResponses object from available model responses (excluding GPT-OSS)
+          const allResponses = {};
+          data.responses.forEach((resp) => {
+            if (resp.model !== 'GPT-OSS') {
+              allResponses[resp.model.toLowerCase()] = resp.response;
+            }
+          });
+
           botMessages = [
             {
               id: Date.now() + Math.random(),
               text: modelResponses['GPT-OSS'] || 'No response',
               sender: 'bot',
               model: 'Threadwork AI',
-              allResponses: {
-                deepseek: modelResponses['DeepSeek'],
-                llama: modelResponses['Llama'],
-                glm: modelResponses['GLM'],
-                qwen: modelResponses['Qwen'],
-              },
+              allResponses: allResponses,
             },
           ];
         } else {
@@ -336,6 +544,7 @@ function HomePage() {
             }
             return chats;
           });
+          saveChatToDatabase(currentChatId);
           return merged;
         });
       } else {
@@ -349,6 +558,7 @@ function HomePage() {
             }
             return chats;
           });
+          saveChatToDatabase(currentChatId);
           return merged;
         });
       }
@@ -363,6 +573,7 @@ function HomePage() {
           }
           return chats;
         });
+        saveChatToDatabase(currentChatId);
         return merged;
       });
     } finally {
