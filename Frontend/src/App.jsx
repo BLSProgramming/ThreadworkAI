@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './Pages/Login.jsx'
 import GoogleLogin from './Pages/GoogleLogin.jsx'
 import Signup from './Pages/Signup.jsx'
+import CompleteProfile from './Pages/CompleteProfile.jsx'
 import HomePage from './Pages/HomePage.jsx'
 import UserSettings from './Pages/UserSettings.jsx'
 import Layout from './Layout.jsx'
@@ -13,6 +14,7 @@ function App() {
         <Route path="/" element={<GoogleLogin />} />
         <Route path="/email-login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/complete-profile" element={<CompleteProfile />} />
         <Route path="/home" element={<Layout><HomePage /></Layout>} />
         <Route path="/chat/:chatId" element={<Layout><HomePage /></Layout>} />
         <Route path="/settings" element={<Layout><UserSettings /></Layout>} />

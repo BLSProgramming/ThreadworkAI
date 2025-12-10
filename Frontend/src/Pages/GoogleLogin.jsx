@@ -61,7 +61,12 @@ function GoogleLogin() {
       const data = await res.json();
       
       if (res.ok) {
-        navigate('/home');
+        // Check if user needs to complete profile
+        if (data.needsProfile) {
+          navigate('/complete-profile', { state: { signupMethod: 'google' } });
+        } else {
+          navigate('/home');
+        }
       } else {
         alert(data.message || data.error || 'Google login failed');
       }
