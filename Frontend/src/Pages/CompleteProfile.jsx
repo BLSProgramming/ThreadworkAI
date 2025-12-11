@@ -5,7 +5,7 @@ import { HiLightningBolt, AiOutlineLoading3Quarters } from '../assets/Icons';
 function CompleteProfile() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { email, password, signupMethod } = location.state || {};
+  const { email, password, signupMethod, isExistingUser } = location.state || {};
   
   const [fullName, setFullName] = useState('');
   const [birthDate, setBirthDate] = useState('');
@@ -35,8 +35,27 @@ function CompleteProfile() {
         } else {
           alert(data.message || data.error || 'Failed to complete profile');
         }
+      } else if (isExistingUser) {
+        // For existing users who need to complete their profile
+        const response = await fetch('/api/complete-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            email,
+            full_name: fullName, 
+            birth_date: birthDate 
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          navigate('/home');
+        } else {
+          alert(data.message || data.error || 'Failed to complete profile');
+        }
       } else {
-        // For email signup
+        // For new email signup
         const response = await fetch('/api/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -51,7 +70,7 @@ function CompleteProfile() {
         const data = await response.json();
         
         if (response.ok) {
-          navigate('/');
+          navigate('/login');
         } else {
           alert(data.message || data.error || 'Signup failed');
         }

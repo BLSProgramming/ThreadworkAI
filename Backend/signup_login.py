@@ -1,19 +1,19 @@
 from flask import Blueprint, request, jsonify, session
 import bcrypt
 from db_connection import get_db_connection
-
+ 
 # Creates blueprints for sign up and login
 signup_routes = Blueprint("signup_login", __name__)
-
+ 
 # Hashes password
 def password_hash(password):
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
+ 
 # Checks login password hash with stored password hash
 def check_password(password, hashed_password):
     return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
-
-
+ 
+ 
 @signup_routes.route('/api/signup', methods=['POST'])
 def signup():
     special_characters = ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '-', '[', ']', '{', '}', '"', ':', ';', "'",
@@ -23,26 +23,26 @@ def signup():
     email = data.get('email')
     password = data.get('password')
     birth_date = data.get('birth_date')
-
+ 
     # Checks if fields are empty
     if not full_name or not password:
         return jsonify({"error": "Full name and password required"}), 400
-
+ 
     # Checks username validity
     if len(full_name) >= 20:
         return jsonify({"error": "invalid username"}), 400
-
+ 
     # Checks if there are any special characters
     for letter in full_name:
         if letter in special_characters:
             return jsonify({"error": "invalid username"}), 400
-
+ 
     # Hashed username and password
     hashed_password = password_hash(password)
-
+ 
     connection = get_db_connection()
     cursor = connection.cursor()
-
+ 
     # Check if the email already exists
     cursor.execute("""
         SELECT 1
@@ -52,12 +52,12 @@ def signup():
         'email': email
     })
     existing_user = cursor.fetchone()
-
+ 
     if existing_user:
         cursor.close()
         connection.close()
         return jsonify({"error": "Username already taken"}), 409
-
+ 
     # Hash password and insert if email is free
     cursor.execute("""
     INSERT INTO users (full_name, email, password, birth_date)
@@ -69,30 +69,30 @@ def signup():
         'password': hashed_password,
         'birth_date': birth_date
     })
-
+ 
     user_id = cursor.fetchone()[0]
     session['user_id'] = user_id
-
+ 
     connection.commit()
     cursor.close()
     connection.close()
-
+ 
     return jsonify({"message": f"User {full_name} created successfully!"}), 200
-
-
+ 
+ 
 @signup_routes.route('/api/login', methods=["POST"])
 def login():
     data = request.get_json()
     email = data.get('email')
     password = data.get('password')
-
+ 
     if not email or not password:
         return jsonify({'error': 'Email and password required'}), 400
-
+ 
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
-
+ 
         # Get stored id and password from DB
         cursor.execute("""
             SELECT id, password
@@ -102,30 +102,30 @@ def login():
             'email': email
         })
         row = cursor.fetchone()
-
+ 
         # Checks if user exists
         if not row:
             cursor.close()
             connection.close()
             return jsonify({"error": "invalid email or password"}), 401
-
+ 
         user_id = row[0]
         stored_hash = row[1]
-
+ 
         # Checks password hash
         if not check_password(password, stored_hash):
             cursor.close()
             connection.close()
             return jsonify({"error": "invalid email or password"}), 401
-
+ 
         # Authenticate if passwords match
         session['user_id'] = user_id
         cursor.close()
         connection.close()
         print(user_id)
-
+ 
         return jsonify({"success": "access granted"}), 200
-
+ 
     except Exception as e:
         print("Error ", e)
         return jsonify({"error": str(e)})

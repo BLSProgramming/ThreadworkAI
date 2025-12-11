@@ -175,7 +175,7 @@ function Signup() {
             <div className="mt-8 pt-6 border-t border-gray-100 text-center">
               <p className="text-gray-500">
                 Already have an account?{' '}
-                <Link to="/" className="text-purple-600 font-semibold hover:text-purple-700 transition-colors">
+                <Link to="/login" className="text-purple-600 font-semibold hover:text-purple-700 transition-colors">
                   Sign in
                 </Link>
               </p>
