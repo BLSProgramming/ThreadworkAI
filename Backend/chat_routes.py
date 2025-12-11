@@ -1,37 +1,37 @@
-from flask import Blueprint, request, jsonify
-import os
+from flask import Blueprint, request, jsonify, session
+from db_connection import get_db_connection
 from openai import OpenAI
 from dotenv import load_dotenv
+import os
 
 load_dotenv()
 
 chat_routes = Blueprint('chat', __name__)
 
-# Initialize OpenAI client with Hugging Face token
+# Client used to send chat messages to different models
 client = OpenAI(
-    base_url="https://router.huggingface.co/v1",
-    api_key=os.environ.get("HF_TOKEN"),
+    base_url="https://router.huggingface.co/v1",  # Points to Hugging Face's OpenAI-compatible API router
+    api_key=os.getenv("HF_TOKEN"),
 )
+
 
 @chat_routes.route('/api/chat', methods=['POST'])
 def chat():
-    """
-    Handle chat messages from the frontend.
-    Expects JSON: { "message": "user message here", "models": ["deepseek", "llama", "glm", "qwen"] }
-    Returns JSON: { "responses": [{ "model": "model_name", "response": "response text" }] }
-    """
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
     try:
         data = request.json
         user_message = data.get('message', '').strip()
         selected_models = data.get('models') or ['deepseek', 'llama', 'glm', 'qwen']
-        selected_models = [m for m in selected_models if m in ['deepseek', 'llama', 'glm', 'qwen']]
-        
+        selected_models = [model for model in selected_models if model in ['deepseek', 'llama', 'glm', 'qwen']]
+
         if not user_message:
             return jsonify({"error": "Message cannot be empty"}), 400
 
         if not selected_models:
             return jsonify({"error": "At least one model must be selected"}), 400
-        
+
         responses = []
         available_responses = []
 
@@ -55,9 +55,10 @@ def chat():
         }
 
         # Helper to invoke a model
-        def invoke_model(cfg):
+        def invoke_model(config):
+            # Sends a chat request to the Hugging Face hosted model
             completion = client.chat.completions.create(
-                model=cfg["hf_model"],
+                model=config["hf_model"],
                 messages=[
                     {
                         "role": "user",
@@ -66,26 +67,48 @@ def chat():
                 ],
             )
             return completion.choices[0].message.content
-        
+
         # Call each selected model
         for model_key in selected_models:
-            cfg = model_configs.get(model_key)
-            if not cfg:
+            # Get model dict information
+            config = model_configs.get(model_key)
+            if not config:
                 continue
             try:
-                model_response = invoke_model(cfg)
+                # Calls the model and gets its answer
+                model_response = invoke_model(config).strip()  # Sends json
                 responses.append({
-                    "model": cfg["label"],
+                    "model": config["label"],
                     "response": model_response
                 })
+                # Adds to avail. responses = Good responses
                 if model_response:
-                    available_responses.append((cfg["label"], model_response))
+                    available_responses.append((config["label"], model_response))
             except Exception as model_err:
-                print(f"Error calling {cfg['label']}: {model_err}")
+                print(f"Error calling {config['label']}: {model_err}")
+                # Adds fail as a response so front end can get it
                 responses.append({
-                    "model": cfg["label"],
+                    "model": config["label"],
                     "response": f"Error: {str(model_err)}"
                 })
+
+        for m in available_responses:
+            connection = get_db_connection()
+            cursor = connection.cursor()
+
+            cursor.execute("""
+                INSERT INTO chats (user_id, model_name, user_message,  model_response)
+                VALUES (%(user_id)s, %(model_name)s, %(user_message)s, %(model_response)s)
+                """, {
+                'user_id': user_id,
+                'model_name': m[0],
+                'user_message': user_message,
+                'model_response': m[1]
+            })
+
+            connection.commit()
+            cursor.close()
+            connection.close()
 
         # Create prompt for GPT-OSS by combining available model responses
         gpt_oss_prompt = user_message
@@ -94,7 +117,6 @@ def chat():
                 f"{label} Response:\n{resp}" for label, resp in available_responses
             ])
             gpt_oss_prompt = f"""You are a synthesis assistant. Read the user question and the model responses. Produce a single, concise, and actionable answer.
-
 User question:
 {user_message}
 
@@ -109,10 +131,12 @@ Synthesis instructions:
 - If there are gaps or uncertainty, note them briefly with a suggested next step.
 - If the question is step-by-step, give an ordered list; otherwise provide 1-2 short paragraphs.
 - Keep the answer under 180 words unless brevity would harm clarity.
+- Filter any response out that is not English
 """
-        
+
         # Call GPT-OSS model with the combined prompt
         try:
+            # noinspection PyTypeChecker
             gpt_oss_completion = client.chat.completions.create(
                 model="openai/gpt-oss-20b:novita",
                 messages=[
@@ -127,19 +151,37 @@ Synthesis instructions:
                 "model": "GPT-OSS",
                 "response": gpt_oss_response
             })
+
+            connection = get_db_connection()
+            cursor = connection.cursor()
+
+            cursor.execute("""
+            INSERT INTO chats (user_id, model_name, user_message,  model_response)
+            VALUES (%(user_id)s, %(model_name)s, %(user_message)s, %(model_response)s)
+            """, {
+                'user_id': user_id,
+                'model_name': "GPT-OSS",
+                'user_message': user_message,
+                'model_response': gpt_oss_response
+            })
+
+            connection.commit()
+            cursor.close()
+            connection.close()
+
         except Exception as gpt_oss_err:
             print(f"Error calling GPT-OSS: {gpt_oss_err}")
             responses.append({
                 "model": "GPT-OSS",
                 "response": f"Error: {str(gpt_oss_err)}"
             })
-        
+
         # Return both responses
         return jsonify({
             "responses": responses,
             "success": True
         }), 200
-        
+
     except Exception as err:
         print(f"Error in chat endpoint: {err}")
         return jsonify({
