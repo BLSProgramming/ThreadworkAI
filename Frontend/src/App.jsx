@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import LandingPage from './Pages/LandingPage.jsx'
+import EmailLogin from './Pages/EmailLogin.jsx'
 import Login from './Pages/Login.jsx'
-import GoogleLogin from './Pages/GoogleLogin.jsx'
 import Signup from './Pages/Signup.jsx'
 import CompleteProfile from './Pages/CompleteProfile.jsx'
 import HomePage from './Pages/HomePage.jsx'
@@ -11,8 +12,9 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<GoogleLogin />} />
-        <Route path="/email-login" element={<Login />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/email-login" element={<EmailLogin />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/complete-profile" element={<CompleteProfile />} />
         <Route path="/home" element={<Layout><HomePage /></Layout>} />
