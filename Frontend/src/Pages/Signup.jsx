@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash, HiLightningBolt, FiClock, FiCreditCard, FiLifeBuoy } from '../assets/Icons';
+import Navbar from '../Components/Navbar';
 
 function Signup() {
   const navigate = useNavigate();
@@ -51,9 +52,15 @@ function Signup() {
   const passwordStrength = getPasswordStrength();
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex flex-col bg-white relative overflow-hidden">
+      {/* Purple gradient decorations */}
+      <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-violet-200 rounded-full mix-blend-multiply filter blur-3xl opacity-15 animate-blob"></div>
+      <div className="absolute bottom-1/3 right-1/4 w-80 h-80 bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
+      
+      <Navbar />
+      <div className="flex flex-1 pt-16 relative z-10">
       {/* Left Panel - Form */}
-      <div className="flex-1 flex items-center justify-end lg:pr-80 p-8 bg-gray-50">
+      <div className="flex-1 flex items-center justify-end lg:pr-80 p-8 bg-white">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
@@ -247,6 +254,7 @@ function Signup() {
             </div>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

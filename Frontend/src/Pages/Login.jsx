@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { HiLightningBolt, FiCheckCircle, FiTrendingUp, FiUsers, AiOutlineLoading3Quarters } from '../assets/Icons';
+import Navbar from '../Components/Navbar';
 
 function Login() {
   const navigate = useNavigate();
@@ -79,7 +80,13 @@ function Login() {
   };
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex flex-col bg-white relative overflow-hidden">
+      {/* Purple gradient decorations */}
+      <div className="absolute top-1/4 right-1/3 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-15 animate-blob"></div>
+      <div className="absolute bottom-1/4 left-1/3 w-80 h-80 bg-violet-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
+      
+      <Navbar />
+      <div className="flex flex-1 pt-16 relative z-10">
       {/* Left Panel - Decorative */}
       <div className="hidden lg:flex lg:w-1/4 bg-gradient-to-br from-indigo-600 via-purple-600 to-purple-800 relative overflow-hidden">
         {/* Animated background shapes */}
@@ -126,7 +133,7 @@ function Login() {
       </div>
 
       {/* Right Panel - Google Login */}
-      <div className="flex-1 flex items-center justify-start lg:pl-80 p-8 pt-24 bg-gray-50">
+      <div className="flex-1 flex items-center justify-start lg:pl-80 p-8 bg-white">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
@@ -192,6 +199,7 @@ function Login() {
             © 2025 Threadwork. All rights reserved.
           </p>
         </div>
+      </div>
       </div>
     </div>
   );
