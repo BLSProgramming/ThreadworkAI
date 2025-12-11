@@ -6,6 +6,8 @@ import Signup from './Pages/Signup.jsx'
 import CompleteProfile from './Pages/CompleteProfile.jsx'
 import HomePage from './Pages/HomePage.jsx'
 import UserSettings from './Pages/UserSettings.jsx'
+import FAQ from './Pages/FAQ.jsx'
+import ContactUs from './Pages/ContactUs.jsx'
 import Layout from './Layout.jsx'
 
 function App() {
@@ -17,6 +19,8 @@ function App() {
         <Route path="/email-login" element={<EmailLogin />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/complete-profile" element={<CompleteProfile />} />
+        <Route path="/faq" element={<FAQ />} />
+        <Route path="/contact" element={<ContactUs />} />
         <Route path="/home" element={<Layout><HomePage /></Layout>} />
         <Route path="/chat/:chatId" element={<Layout><HomePage /></Layout>} />
         <Route path="/settings" element={<Layout><UserSettings /></Layout>} />
