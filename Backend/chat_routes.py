@@ -188,3 +188,126 @@ Synthesis instructions:
             "error": str(err),
             "success": False
         }), 500
+
+
+@chat_routes.route('/api/trial-chat', methods=['POST'])
+def trial_chat():
+    """
+    Trial chat endpoint for unauthenticated users on the landing page.
+    Limited to 2 models (deepseek, llama) and doesn't save to database.
+    """
+    try:
+        data = request.json
+        user_message = data.get('message', '').strip()
+        
+        # Force only 2 models for trial
+        selected_models = ['deepseek', 'llama']
+
+        if not user_message:
+            return jsonify({"error": "Message cannot be empty"}), 400
+
+        responses = []
+        available_responses = []
+
+        model_configs = {
+            "deepseek": {
+                "label": "DeepSeek",
+                "hf_model": "deepseek-ai/DeepSeek-V3.2:novita",
+            },
+            "llama": {
+                "label": "Llama",
+                "hf_model": "meta-llama/Llama-3.1-8B-Instruct:novita",
+            },
+        }
+
+        # Helper to invoke a model
+        def invoke_model(config):
+            completion = client.chat.completions.create(
+                model=config["hf_model"],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": user_message
+                    }
+                ],
+            )
+            return completion.choices[0].message.content
+
+        # Call each selected model
+        for model_key in selected_models:
+            config = model_configs.get(model_key)
+            if not config:
+                continue
+            try:
+                model_response = invoke_model(config).strip()
+                responses.append({
+                    "model": config["label"],
+                    "response": model_response
+                })
+                if model_response:
+                    available_responses.append((config["label"], model_response))
+            except Exception as model_err:
+                print(f"Error calling {config['label']}: {model_err}")
+                responses.append({
+                    "model": config["label"],
+                    "response": f"Error: {str(model_err)}"
+                })
+
+        # Create synthesis prompt
+        gpt_oss_prompt = user_message
+        if available_responses:
+            combined = "\n\n".join([
+                f"{label} Response:\n{resp}" for label, resp in available_responses
+            ])
+            gpt_oss_prompt = f"""You are a synthesis assistant. Read the user question and the model responses. Produce a single, concise, and actionable answer.
+User question:
+{user_message}
+
+Model responses:
+{combined}
+
+Synthesis instructions:
+- Combine the strongest points; resolve disagreements with reasoning.
+- If facts conflict, prefer the more specific, evidenced, and consistent statements.
+- Remove fluff; be direct and organized with short paragraphs or bullets.
+- Do not mention model names or show any raw responses.
+- If there are gaps or uncertainty, note them briefly with a suggested next step.
+- If the question is step-by-step, give an ordered list; otherwise provide 1-2 short paragraphs.
+- Keep the answer under 180 words unless brevity would harm clarity.
+- Filter any response out that is not English
+"""
+
+        # Call GPT-OSS model for synthesis
+        try:
+            gpt_oss_completion = client.chat.completions.create(
+                model="openai/gpt-oss-20b:novita",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": gpt_oss_prompt
+                    }
+                ],
+            )
+            gpt_oss_response = gpt_oss_completion.choices[0].message.content
+            responses.append({
+                "model": "GPT-OSS",
+                "response": gpt_oss_response
+            })
+        except Exception as gpt_oss_err:
+            print(f"Error calling GPT-OSS: {gpt_oss_err}")
+            responses.append({
+                "model": "GPT-OSS",
+                "response": f"Error: {str(gpt_oss_err)}"
+            })
+
+        return jsonify({
+            "responses": responses,
+            "success": True
+        }), 200
+
+    except Exception as err:
+        print(f"Error in trial chat endpoint: {err}")
+        return jsonify({
+            "error": str(err),
+            "success": False
+        }), 500
