@@ -15,7 +15,7 @@ def check_password(password, hashed_password):
 
 
 @signup_routes.route('/api/signup', methods=['POST'])
-def add_username():
+def signup():
     special_characters = ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '-', '[', ']', '{', '}', '"', ':', ';', "'",
                           '/', '?', '>', '<', '|', '=', '+']
     data = request.get_json()
@@ -43,7 +43,7 @@ def add_username():
     connection = get_db_connection()
     cursor = connection.cursor()
 
-    # Check if the username already exists
+    # Check if the email already exists
     cursor.execute("""
         SELECT 1
         FROM users
@@ -71,11 +71,14 @@ def add_username():
     })
 
     user_id = cursor.fetchone()[0]
+    session['user_id'] = user_id
+
     connection.commit()
     cursor.close()
     connection.close()
 
     return jsonify({"message": f"User {full_name} created successfully!"}), 200
+
 
 @signup_routes.route('/api/login', methods=["POST"])
 def login():
@@ -90,25 +93,36 @@ def login():
         connection = get_db_connection()
         cursor = connection.cursor()
 
-        # Gets stored id and password from signup
+        # Get stored id and password from DB
         cursor.execute("""
-        SELECT id, password
-        FROM users
-        WHERE email = %(email)s
+            SELECT id, password
+            FROM users
+            WHERE email = %(email)s
         """, {
             'email': email
         })
         row = cursor.fetchone()
 
-        # If there is no username, return an error
+        # Checks if user exists
         if not row:
-            return jsonify({"error": "invalid full name or password"}), 401
+            cursor.close()
+            connection.close()
+            return jsonify({"error": "invalid email or password"}), 401
 
         user_id = row[0]
         stored_hash = row[1]
 
+        # Checks password hash
+        if not check_password(password, stored_hash):
+            cursor.close()
+            connection.close()
+            return jsonify({"error": "invalid email or password"}), 401
+
+        # Authenticate if passwords match
+        session['user_id'] = user_id
         cursor.close()
         connection.close()
+        print(user_id)
 
         return jsonify({"success": "access granted"}), 200
 
