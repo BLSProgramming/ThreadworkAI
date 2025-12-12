@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Prism from 'prismjs';
 import 'prismjs/components/prism-python';
 import 'prismjs/themes/prism-tomorrow.css';
 import { HiLightningBolt } from '../assets/Icons';
 import Collapsible from '../Components/Collapsible';
+import { streamChat } from '../utils/streamChat';
 
 function HomePage() {
   const navigate = useNavigate();
@@ -16,30 +17,49 @@ function HomePage() {
     llama: true,
     glm: true,
     qwen: true,
+    essential: false,
+    moonshot: false,
   });
   const [modelSearch, setModelSearch] = useState('');
+  const [selectedTags, setSelectedTags] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
   const messagesEndRef = useRef(null);
   const pendingChatRef = useRef(null);
   const isLoadingChatRef = useRef(false);
+  const currentAbortRef = useRef(null);
 
-  const modelOptions = [
-    { key: 'deepseek', label: 'DeepSeek' },
-    { key: 'llama', label: 'Llama' },
-    { key: 'glm', label: 'GLM-4.6' },
-    { key: 'qwen', label: 'Qwen' },
-  ];
+  const modelOptions = useMemo(() => [
+    { key: 'deepseek', label: 'DeepSeek', tags: ['Reasoning', 'Coding', 'Math', 'Long Context'] },
+    { key: 'llama', label: 'Llama', tags: ['Fast', 'General', 'Lightweight'] },
+    { key: 'glm', label: 'GLM-4.6', tags: ['Multilingual', 'Reasoning', 'Coding'] },
+    { key: 'qwen', label: 'Qwen', tags: ['Coding', 'Reasoning', 'Tools'] },
+    { key: 'essential', label: 'Essential', tags: ['Creative', 'Writing', 'General'] },
+    { key: 'moonshot', label: 'Moonshot', tags: ['Long Reasoning', 'Planning', 'Multilingual'] },
+  ], []);
+
+  const allTags = useMemo(() => {
+    const set = new Set();
+    modelOptions.forEach((m) => (m.tags || []).forEach((t) => set.add(t)));
+    return Array.from(set).sort();
+  }, [modelOptions]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Inline CodeBlock component for copy UX per block
+  // Inline CodeBlock component for copy UX per block with syntax highlighting
   const CodeBlock = ({ code, lang = 'text' }) => {
     const [copied, setCopied] = useState(false);
     const timeoutRef = useRef(null);
+    const codeRef = useRef(null);
 
-    useEffect(() => () => clearTimeout(timeoutRef.current), []);
+    useEffect(() => {
+      if (codeRef.current) {
+        Prism.highlightElement(codeRef.current);
+      }
+      return () => clearTimeout(timeoutRef.current);
+    }, [code, lang]);
 
     const handleCopy = async () => {
       try {
@@ -52,25 +72,30 @@ function HomePage() {
       }
     };
 
+    const langDisplay = lang ? lang.toUpperCase() : 'TEXT';
+
     return (
-      <pre className="relative bg-gray-900 text-gray-100 text-sm rounded-lg p-4 overflow-x-auto border border-gray-800 my-2">
-        <div className="text-xs text-gray-400 mb-2 flex items-center gap-2">
-          <span className="px-2 py-0.5 bg-gray-800 rounded uppercase tracking-wide">{lang}</span>
-          <span>Code</span>
+      <div className="relative my-3 rounded-lg overflow-hidden border border-gray-800 shadow-md bg-gray-900">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-gray-950 border-b border-gray-800">
+          <span className="text-xs font-semibold text-gray-400 tracking-wide uppercase">{langDisplay}</span>
           <button
             type="button"
             onClick={handleCopy}
-            className={`ml-auto px-3 py-1 text-[11px] font-semibold rounded border transition transform active:scale-95 ${
+            className={`px-3 py-1.5 text-[11px] font-semibold rounded border transition-all transform active:scale-95 ${
               copied
-                ? 'bg-emerald-600 text-white border-emerald-700'
-                : 'bg-gray-800 text-gray-200 border-gray-700 hover:bg-gray-700'
+                ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm'
+                : 'bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700 hover:text-gray-100'
             }`}
           >
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? '✓ Copied' : 'Copy'}
           </button>
         </div>
-        <code className={`block whitespace-pre language-${lang.toLowerCase()}`}>{code.trimEnd()}</code>
-      </pre>
+        <pre className="p-4 overflow-x-auto text-sm bg-gray-900">
+          <code ref={codeRef} className={`language-${lang.toLowerCase()} text-gray-100`}>
+            {code.trimEnd()}
+          </code>
+        </pre>
+      </div>
     );
   };
 
@@ -239,7 +264,7 @@ function HomePage() {
         }
 
         return (
-          <p key={key} className="text-sm leading-relaxed text-gray-800">
+          <p key={key} className="text-sm leading-relaxed text-gray-800 mb-2">
             {renderTextWithLinks(trimmed)}
           </p>
         );
@@ -424,12 +449,14 @@ function HomePage() {
     }, 100);
   }, [chatId]);
 
+  // Auto-scroll and syntax highlighting on message updates
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  useEffect(() => {
-    Prism.highlightAll();
+    const scrollTimer = setTimeout(() => scrollToBottom(), 50);
+    const highlightTimer = setTimeout(() => Prism.highlightAll(), 0);
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(highlightTimer);
+    };
   }, [messages]);
 
   useEffect(() => {
@@ -497,72 +524,131 @@ function HomePage() {
 
     setInput('');
     setIsLoading(true);
+    // Setup abort controller for this stream
+    if (currentAbortRef.current) {
+      try { currentAbortRef.current.abort(); } catch {}
+    }
+    const abortController = new AbortController();
+    currentAbortRef.current = abortController;
+
+    // Timings
+    const startTs = performance.now();
+    let firstModelMs = null;
+    let synthesisMs = null;
+
+    // Collect all responses as they stream in
+    const allResponses = {};
+    let synthesisResponse = null;
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: savedInput, models: activeModels }),
-      });
+      await streamChat(
+        savedInput,
+        activeModels,
+        // onModelResponse - handle each model response as it arrives
+        (modelData) => {
+          const { model, response } = modelData;
+          allResponses[model.toLowerCase()] = response;
 
-      if (response.ok) {
-        const data = await response.json();
-        let botMessages = [];
-        if (data.responses && Array.isArray(data.responses)) {
-          const modelResponses = {};
-          data.responses.forEach((resp) => {
-            modelResponses[resp.model] = resp.response;
-          });
+          if (firstModelMs === null) {
+            firstModelMs = performance.now() - startTs;
+          }
 
-          // Build allResponses object from available model responses (excluding GPT-OSS)
-          const allResponses = {};
-          data.responses.forEach((resp) => {
-            if (resp.model !== 'GPT-OSS') {
-              allResponses[resp.model.toLowerCase()] = resp.response;
+          // Update messages with streaming responses
+          setMessages((currentMessages) => {
+            const existingBotMessage = currentMessages.find(
+              (m) => m.sender === 'bot' && m.id === userMessage.id + 1
+            );
+
+            if (existingBotMessage) {
+              // Update existing bot message with new responses
+              return currentMessages.map((m) =>
+                m.id === existingBotMessage.id
+                  ? {
+                      ...m,
+                      allResponses: { ...m.allResponses, ...allResponses },
+                    }
+                  : m
+              );
+            } else {
+              // Create new bot message
+              const newBotMessage = {
+                id: userMessage.id + 1,
+                text: synthesisResponse || `Received response from ${model}...`,
+                sender: 'bot',
+                model: 'Threadwork AI',
+                allResponses: allResponses,
+              };
+              return [...currentMessages, newBotMessage];
             }
           });
+        },
+        // onSynthesis - handle synthesis response when it arrives
+        (synthesisData) => {
+          const { response } = synthesisData;
+          synthesisResponse = response;
+          synthesisMs = performance.now() - startTs;
 
-          botMessages = [
-            {
-              id: Date.now() + Math.random(),
-              text: modelResponses['GPT-OSS'] || 'No response',
-              sender: 'bot',
-              model: 'Threadwork AI',
-              allResponses: allResponses,
-            },
-          ];
-        } else {
-          botMessages = [{ id: Date.now() + 1, text: 'No response received', sender: 'bot' }];
+          setMessages((currentMessages) => {
+            return currentMessages.map((m) =>
+              m.sender === 'bot' && m.id === userMessage.id + 1
+                ? {
+                    ...m,
+                    text: response,
+                    allResponses: allResponses,
+                  }
+                : m
+            );
+          });
+        },
+        // onDone - stream complete
+        () => {
+          setIsLoading(false);
+          setMessages((currentMessages) => {
+            const merged = currentMessages;
+            persistChats((chats) => {
+              const chatIndex = chats.findIndex((chat) => chat.id === currentChatId);
+              if (chatIndex !== -1) {
+                chats[chatIndex].messages = merged;
+              }
+              return chats;
+            });
+            saveChatToDatabase(currentChatId);
+            return merged;
+          });
+          // Attach timings to the latest bot message
+          setMessages((current) => current.map((m) => {
+            if (m.sender === 'bot' && m.id === userMessage.id + 1) {
+              return { ...m, timings: {
+                firstModelMs: firstModelMs,
+                synthesisMs: synthesisMs,
+                totalMs: performance.now() - startTs,
+              }};
+            }
+            return m;
+          }));
+        },
+        // onError - handle error
+        (error) => {
+          console.error('Stream error:', error);
+          setIsLoading(false);
+          const botMessage = { id: Date.now() + 1, text: 'Error: Could not get response', sender: 'bot' };
+          setMessages((currentMessages) => {
+            const merged = [...currentMessages, botMessage];
+            persistChats((chats) => {
+              const chatIndex = chats.findIndex((chat) => chat.id === currentChatId);
+              if (chatIndex !== -1) {
+                chats[chatIndex].messages = merged;
+              }
+              return chats;
+            });
+            saveChatToDatabase(currentChatId);
+            return merged;
+          });
         }
-
-        setMessages((currentMessages) => {
-          const merged = [...currentMessages, ...botMessages];
-          persistChats((chats) => {
-            const chatIndex = chats.findIndex((chat) => chat.id === currentChatId);
-            if (chatIndex !== -1) {
-              chats[chatIndex].messages = merged;
-            }
-            return chats;
-          });
-          saveChatToDatabase(currentChatId);
-          return merged;
-        });
-      } else {
-        const botMessage = { id: Date.now() + 1, text: 'Error: Could not get response', sender: 'bot' };
-        setMessages((currentMessages) => {
-          const merged = [...currentMessages, botMessage];
-          persistChats((chats) => {
-            const chatIndex = chats.findIndex((chat) => chat.id === currentChatId);
-            if (chatIndex !== -1) {
-              chats[chatIndex].messages = merged;
-            }
-            return chats;
-          });
-          saveChatToDatabase(currentChatId);
-          return merged;
-        });
-      }
+      , abortController.signal);
     } catch (err) {
+      console.error('Chat error:', err);
+      setIsLoading(false);
       const botMessage = { id: Date.now() + 1, text: 'Network error. Please try again.', sender: 'bot' };
       setMessages((currentMessages) => {
         const merged = [...currentMessages, botMessage];
@@ -581,6 +667,16 @@ function HomePage() {
     }
   };
 
+  const handleCancelStream = () => {
+    try {
+      if (currentAbortRef.current) {
+        currentAbortRef.current.abort();
+        currentAbortRef.current = null;
+        setIsLoading(false);
+      }
+    } catch {}
+  };
+
   const lastBotId = [...messages].reverse().find((m) => m.sender === 'bot')?.id;
   const filteredModels = modelOptions.filter((opt) =>
     opt.label.toLowerCase().includes(modelSearch.toLowerCase())
@@ -588,6 +684,146 @@ function HomePage() {
 
   return (
     <>
+      {/* Sticky Model Selection Bar */}
+      <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-3 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-gray-900">Active Models:</p>
+            <div className="flex flex-wrap gap-1">
+              {Object.entries(selectedModels)
+                .filter(([_, selected]) => selected)
+                .map(([key, _]) => {
+                  const model = modelOptions.find(m => m.key === key);
+                  return (
+                    <span
+                      key={key}
+                      className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-medium"
+                    >
+                      {model?.label}
+                    </span>
+                  );
+                })}
+            </div>
+          </div>
+          <div className="relative">
+            <button
+              onClick={() => setShowModelDropdown(!showModelDropdown)}
+              className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors"
+            >
+              <span className="text-sm font-medium text-indigo-700">{Object.values(selectedModels).filter(Boolean).length}/4</span>
+              <svg className={`w-4 h-4 text-indigo-700 transition-transform ${showModelDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+              </svg>
+            </button>
+
+            {showModelDropdown && (
+              <div className="absolute right-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                <div className="p-3 border-b border-gray-200">
+                  <input
+                    type="text"
+                    value={modelSearch}
+                    onChange={(e) => setModelSearch(e.target.value)}
+                    placeholder="Search models..."
+                    className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                </div>
+                <div className="p-3 border-b border-gray-200">
+                  <div className="flex flex-wrap gap-2">
+                    {allTags.map((tag) => {
+                      const active = selectedTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() =>
+                            setSelectedTags((prev) =>
+                              prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+                            )
+                          }
+                          className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                            active
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                    {selectedTags.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTags([])}
+                        className="px-2.5 py-1 rounded-full text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="max-h-96 overflow-y-auto">
+                  {modelOptions
+                    .filter((opt) => {
+                      const matchText = opt.label.toLowerCase().includes(modelSearch.toLowerCase());
+                      const matchTags =
+                        selectedTags.length === 0 || (opt.tags && selectedTags.some((t) => opt.tags.includes(t)));
+                      return matchText && matchTags;
+                    })
+                    .map((opt) => {
+                      const currentSelected = Object.values(selectedModels).filter(Boolean).length;
+                      const isCurrentlySelected = selectedModels[opt.key];
+                      const isMaxed = currentSelected >= 4 && !isCurrentlySelected;
+
+                      return (
+                        <div
+                          key={opt.key}
+                          className={`flex items-center justify-between px-4 py-3 border-b border-gray-100 last:border-b-0 ${isMaxed ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50 cursor-pointer'}`}
+                          onClick={() => {
+                            if (isCurrentlySelected || currentSelected < 4) {
+                              setSelectedModels((prev) => ({ ...prev, [opt.key]: !prev[opt.key] }));
+                            }
+                          }}
+                        >
+                          <div className="pr-3">
+                            <p className="text-sm font-semibold text-gray-900">{opt.label}</p>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {(opt.tags || []).map((tag) => (
+                                <span
+                                  key={`${opt.key}-${tag}`}
+                                  className="px-1.5 py-0.5 text-[10px] rounded bg-gray-100 text-gray-700 border border-gray-200"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={!!selectedModels[opt.key]}
+                            onChange={() => {}}
+                            disabled={isMaxed}
+                            className={`w-4 h-4 text-indigo-600 rounded ${isMaxed ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                      );
+                    })}
+                  {modelOptions.filter((opt) => {
+                    const matchText = opt.label.toLowerCase().includes(modelSearch.toLowerCase());
+                    const matchTags = selectedTags.length === 0 || (opt.tags && selectedTags.some((t) => opt.tags.includes(t)));
+                    return matchText && matchTags;
+                  }).length === 0 && (
+                    <div className="text-center py-6 text-sm text-gray-500">
+                      No models match your search and tag filters
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="flex-1 overflow-y-auto bg-gradient-to-b from-gray-50 to-white">
         <div className="max-w-7xl mx-auto px-3 py-6 space-y-6">
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 flex items-center justify-between">
@@ -597,63 +833,6 @@ function HomePage() {
             </div>
             <div className="flex items-center gap-3 text-sm text-gray-600">
               <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full">Synthesized answers</span>
-              <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full">4 model views</span>
-            </div>
-          </div>
-
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-              <div>
-                <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">Model Selection</p>
-                <p className="text-sm text-gray-600">Pick which models to include</p>
-              </div>
-              <input
-                type="text"
-                value={modelSearch}
-                onChange={(e) => setModelSearch(e.target.value)}
-                placeholder="Search models..."
-                className="w-56 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              />
-            </div>
-            <div className="p-4 space-y-3">
-              {filteredModels.map((opt) => (
-                <div
-                  key={opt.key}
-                  className="flex items-center justify-between px-3 py-3 border border-gray-100 rounded-lg hover:border-indigo-200 transition-colors"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{opt.label}</p>
-                    <p className="text-xs text-gray-500">Enable this model in the ensemble</p>
-                  </div>
-                  <label className="inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={!!selectedModels[opt.key]}
-                      onChange={() =>
-                        setSelectedModels((prev) => ({ ...prev, [opt.key]: !prev[opt.key] }))
-                      }
-                    />
-                    <span
-                      className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${
-                        selectedModels[opt.key] ? 'bg-indigo-600' : 'bg-gray-200'
-                      }`}
-                    >
-                      <span
-                        className={`bg-white w-4 h-4 rounded-full shadow transform transition-transform ${
-                          selectedModels[opt.key] ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </span>
-                  </label>
-                </div>
-              ))}
-
-              {filteredModels.length === 0 && (
-                <div className="text-center py-6 text-sm text-gray-500">
-                  No models found matching "{modelSearch}"
-                </div>
-              )}
             </div>
           </div>
 
@@ -684,15 +863,18 @@ function HomePage() {
           ) : (
             <div className="space-y-4">
               {messages.map((message) => (
-                <div key={message.id}>
+                <div key={message.id} className="mb-6">
                   {message.sender === 'user' ? (
-                    <div className="flex justify-end mb-4">
-                      <div className="max-w-2xl bg-indigo-600 text-white rounded-lg rounded-br-none px-4 py-3">
-                        <p className="text-sm leading-relaxed">{message.text}</p>
+                    <div className="flex justify-end items-end gap-3">
+                      <div className="max-w-2xl bg-indigo-600 text-white rounded-xl rounded-br-none px-4 py-3 shadow-sm">
+                        <p className="text-sm leading-relaxed break-words">{message.text}</p>
+                      </div>
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold text-sm flex-shrink-0 mb-1">
+                        👤
                       </div>
                     </div>
                   ) : (
-                    <div className="flex gap-6 mb-4">
+                    <div className="flex gap-6">
                       {message.allResponses && Object.keys(message.allResponses || {}).length > 0 && (
                         <div className="flex-[0.75] max-w-xl space-y-4">
                           {[
@@ -724,21 +906,35 @@ function HomePage() {
                               heading: 'text-emerald-700',
                               collapse: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
                             },
+                            {
+                              key: 'essential',
+                              title: 'Essential',
+                              container: 'bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200',
+                              heading: 'text-orange-700',
+                              collapse: 'bg-orange-50 text-orange-700 hover:bg-orange-100',
+                            },
+                            {
+                              key: 'moonshot',
+                              title: 'Moonshot',
+                              container: 'bg-gradient-to-br from-pink-50 to-pink-100 border border-pink-200',
+                              heading: 'text-pink-700',
+                              collapse: 'bg-pink-50 text-pink-700 hover:bg-pink-100',
+                            },
                           ]
                             .filter((item) => message.allResponses[item.key])
                             .map((item) => (
                               <div
                                 key={item.key}
-                                className={`${item.container} rounded-lg shadow-sm`}
+                                className={`${item.container} rounded-xl shadow-sm overflow-hidden border-l-4 transition-shadow hover:shadow-md`}
                               >
                                 <Collapsible
                                   defaultOpen={false}
-                                  titleClassName={`px-4 py-3 text-xs font-bold ${item.heading} uppercase tracking-wider`}
+                                  titleClassName={`px-4 py-3 text-xs font-bold ${item.heading} uppercase tracking-wider font-mono`}
                                   title={item.title}
                                   showCollapseButton={true}
-                                  collapseButtonClassName={item.collapse}
+                                  collapseButtonClassName={`${item.collapse} rounded-lg`}
                                 >
-                                  <div className="px-4 pb-6 pt-1 space-y-2 text-sm text-gray-900">
+                                  <div className="px-4 pb-4 pt-2 space-y-3 text-sm text-gray-900">
                                     {renderFormattedContent(message.allResponses[item.key] || 'No response', {
                                       headingClass: item.heading,
                                       bulletColor: item.heading,
@@ -751,15 +947,25 @@ function HomePage() {
                       )}
 
                       <div className="flex-[2.25]">
-                        <div className="bg-gray-100 text-gray-900 rounded-lg rounded-bl-none h-fit" key={`detail-${message.id}`}>
+                        <div className="bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900 rounded-xl rounded-bl-none h-fit shadow-sm" key={`detail-${message.id}`}>
                           <Collapsible
                             defaultOpen={message.id === lastBotId}
-                            titleClassName="px-4 py-3 text-xs font-semibold text-indigo-600 uppercase tracking-wider"
-                            title={<span>{message.model ? `✓ ${message.model}` : 'Threadwork AI'}</span>}
+                            titleClassName="px-4 py-3 text-xs font-bold text-indigo-700 uppercase tracking-wider font-mono"
+                            title={<span className="flex items-center gap-3">
+                              <span className="text-emerald-600">✓</span>
+                              {message.model ? message.model : 'Threadwork AI'}
+                              {message.timings && (
+                                <span className="ml-auto flex items-center gap-2 text-[10px] text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                                  <span>first: {Math.round(message.timings.firstModelMs)}ms</span>
+                                  <span>syn: {Math.round(message.timings.synthesisMs || 0)}ms</span>
+                                  <span>total: {Math.round(message.timings.totalMs)}ms</span>
+                                </span>
+                              )}
+                            </span>}
                             showCollapseButton={true}
-                            collapseButtonClassName="bg-indigo-100 text-indigo-600 hover:bg-indigo-200"
+                            collapseButtonClassName="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-lg font-semibold"
                           >
-                            <div className="px-4 pb-6 pt-1 space-y-3 text-gray-900">
+                            <div className="px-4 pb-4 pt-2 space-y-3 text-sm text-gray-800">
                               {renderFormattedContent(message.text || 'No response', {
                                 headingClass: 'text-indigo-700',
                                 bulletColor: 'text-indigo-600',
@@ -774,11 +980,14 @@ function HomePage() {
               ))}
               {isLoading && (
                 <div className="flex justify-start">
-                  <div className="bg-gray-100 text-gray-900 px-4 py-3 rounded-lg rounded-bl-none">
-                    <div className="flex gap-2">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200"></div>
+                  <div className="bg-gradient-to-r from-gray-50 to-gray-100 text-gray-900 px-4 py-3 rounded-xl rounded-bl-none shadow-sm">
+                    <div className="flex gap-2 items-center">
+                      <span className="text-xs text-gray-600 font-medium">Generating response</span>
+                      <div className="flex gap-1.5 ml-2">
+                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -789,24 +998,33 @@ function HomePage() {
         </div>
       </div>
 
-      <div className="border-t border-gray-200 bg-white">
-        <div className="max-w-7xl mx-auto px-3 py-4">
-          <form onSubmit={handleSendMessage} className="flex gap-3">
+      <div className="border-t border-gray-200 bg-white shadow-md">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <form onSubmit={handleSendMessage} className="flex gap-3 items-center">
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Send a message..."
+              placeholder="Ask anything..."
               disabled={isLoading}
-              className="flex-1 px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl text-gray-900 placeholder:text-gray-500 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             />
             <button
               type="submit"
               disabled={isLoading || !input.trim()}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               Send
             </button>
+            {isLoading && (
+              <button
+                type="button"
+                onClick={handleCancelStream}
+                className="px-4 py-3 bg-gray-200 text-gray-800 rounded-xl font-medium hover:bg-gray-300 transition-all"
+              >
+                Cancel
+              </button>
+            )}
           </form>
         </div>
       </div>

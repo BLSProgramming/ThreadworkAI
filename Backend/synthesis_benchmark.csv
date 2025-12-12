@@ -1,0 +1,13 @@
+prompt,trial,status,models_count,first_model_s,synthesis_s,total_s,code,error
+Explain quicksort in 5 bullet points.,0,ok,4,2.543,7.608,7.609,,
+Explain quicksort in 5 bullet points.,1,ok,4,0.369,0.4,0.401,,
+Explain quicksort in 5 bullet points.,2,ok,4,0.373,0.425,0.425,,
+Translate this to Spanish: The sky is clear and blue.,0,ok,4,0.377,0.393,0.393,,
+Translate this to Spanish: The sky is clear and blue.,1,ok,4,0.379,0.42,0.42,,
+Translate this to Spanish: The sky is clear and blue.,2,ok,4,0.376,0.43,0.43,,
+Write a Python function to merge two sorted lists.,0,ok,4,0.384,0.462,0.462,,
+Write a Python function to merge two sorted lists.,1,ok,4,0.392,0.396,0.396,,
+Write a Python function to merge two sorted lists.,2,ok,4,0.379,0.395,0.395,,
+Summarize the key causes of WW1 in under 150 words.,0,ok,4,0.387,0.406,0.406,,
+Summarize the key causes of WW1 in under 150 words.,1,ok,4,0.387,0.391,0.391,,
+Summarize the key causes of WW1 in under 150 words.,2,ok,4,0.382,0.383,0.384,,
