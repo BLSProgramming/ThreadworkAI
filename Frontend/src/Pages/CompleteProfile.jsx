@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { HiLightningBolt, AiOutlineLoading3Quarters } from '../assets/Icons';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { AiOutlineLoading3Quarters } from '../assets/Icons';
 
 function CompleteProfile() {
   const navigate = useNavigate();
@@ -10,7 +10,30 @@ function CompleteProfile() {
   const [fullName, setFullName] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
+
+  // Check if profile is already complete on mount
+  useEffect(() => {
+    const checkProfileStatus = async () => {
+      try {
+        const response = await fetch('/api/check-profile');
+        const data = await response.json();
+        
+        if (response.ok && data.profileComplete) {
+          // Profile already complete, redirect to home
+          navigate('/home', { replace: true });
+        } else {
+          setIsChecking(false);
+        }
+      } catch (err) {
+        // If error checking, allow profile completion
+        setIsChecking(false);
+      }
+    };
+
+    checkProfileStatus();
+  }, [navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -83,38 +106,36 @@ function CompleteProfile() {
     }
   };
 
-  return (
-    <div className="min-h-screen flex">
-      {/* Left Panel - Decorative */}
-      <div className="hidden lg:flex lg:w-1/4 bg-gradient-to-br from-indigo-600 via-purple-600 to-purple-800 relative overflow-hidden">
-        <div className="absolute inset-0">
-          <div className="absolute top-20 left-20 w-72 h-72 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
-          <div className="absolute bottom-20 right-20 w-96 h-96 bg-purple-400/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
-          <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-indigo-400/15 rounded-full blur-2xl animate-pulse delay-500"></div>
-        </div>
-        
-        <div className="relative z-10 flex flex-col justify-center px-16 text-white">
-          <div className="mb-8">
-            <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mb-6">
-              <HiLightningBolt className="w-8 h-8 text-white" />
-            </div>
-            <h2 className="text-4xl font-bold mb-4">Almost there!</h2>
-            <p className="text-lg text-white/80 leading-relaxed">
-              Just a few more details to personalize your experience
-            </p>
-          </div>
-        </div>
+  // Show loading while checking profile status
+  if (isChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <AiOutlineLoading3Quarters className="w-8 h-8 animate-spin text-purple-600" />
       </div>
+    );
+  }
 
-      {/* Right Panel - Form */}
-      <div className="flex-1 flex items-center justify-start lg:pl-80 p-8 bg-gray-50">
-        <div className="w-full max-w-md">
-          <div className="lg:hidden text-center mb-8">
-            <div className="w-14 h-14 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <HiLightningBolt className="w-7 h-7 text-white" />
-            </div>
+  return (
+    <div className="min-h-screen flex flex-col bg-white relative overflow-hidden">
+      {/* Purple gradient decorations */}
+      <div className="absolute top-1/4 right-1/3 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-15 animate-blob"></div>
+      <div className="absolute bottom-1/4 left-1/3 w-80 h-80 bg-violet-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
+      
+      {/* Logo/Brand in top-left */}
+      <div className="absolute top-6 left-6 z-10">
+        <Link to="/" className="flex items-center gap-2 group">
+          <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/20 group-hover:shadow-purple-500/40 transition-all duration-300">
+            <span className="text-white font-bold text-lg">T</span>
           </div>
-
+          <span className="text-xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent group-hover:from-violet-500 group-hover:to-purple-500 transition-all duration-300">
+            Threadwork
+          </span>
+        </Link>
+      </div>
+      
+      {/* Centered form panel */}
+      <div className="flex-1 flex items-center justify-center p-8 relative z-10">
+        <div className="w-full max-w-md">
           <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 p-10">
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
@@ -123,7 +144,7 @@ function CompleteProfile() {
               <p className="text-gray-500">Tell us a bit about yourself</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-2">
                   Full name
@@ -174,13 +195,13 @@ function CompleteProfile() {
               <button
                 type="submit"
                 disabled={isLoading || !agreeToTerms}
-                className="w-full py-3.5 mt-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                className="w-full py-3.5 mt-2 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl font-semibold hover:from-violet-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
               >
                 {isLoading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <AiOutlineLoading3Quarters className="animate-spin h-5 w-5" />
+                  <>
+                    <AiOutlineLoading3Quarters className="w-5 h-5 animate-spin" />
                     {signupMethod === 'google' ? 'Completing...' : 'Creating account...'}
-                  </span>
+                  </>
                 ) : (
                   signupMethod === 'google' ? 'Complete Profile' : 'Create account'
                 )}
