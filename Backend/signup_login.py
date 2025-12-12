@@ -161,3 +161,43 @@ def check_profile():
     except Exception as e:
         print("Check profile error:", e)
         return jsonify({"error": str(e)}), 500
+
+
+@signup_routes.route('/api/complete-profile', methods=['POST'])
+def complete_profile():
+    """Complete profile for existing authenticated users"""
+    user_id = session.get('user_id')
+    
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    data = request.get_json()
+    full_name = data.get('full_name')
+    birth_date = data.get('birth_date')
+    
+    if not full_name or not birth_date:
+        return jsonify({"error": "Full name and birth date required"}), 400
+    
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        
+        cursor.execute("""
+            UPDATE users
+            SET full_name = %(full_name)s, birth_date = %(birth_date)s
+            WHERE id = %(user_id)s
+        """, {
+            'full_name': full_name,
+            'birth_date': birth_date,
+            'user_id': user_id
+        })
+        
+        connection.commit()
+        cursor.close()
+        connection.close()
+        
+        return jsonify({"message": "Profile completed successfully"}), 200
+        
+    except Exception as e:
+        print("Complete profile error:", e)
+        return jsonify({"error": str(e)}), 500
