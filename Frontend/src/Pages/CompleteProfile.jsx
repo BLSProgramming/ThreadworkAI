@@ -17,7 +17,7 @@ function CompleteProfile() {
   useEffect(() => {
     const checkProfileStatus = async () => {
       try {
-        const response = await fetch('/api/check-profile');
+        const response = await fetch('/api/check-profile', { credentials: 'include' });
         const data = await response.json();
         
         if (response.ok && data.profileComplete) {
@@ -63,8 +63,8 @@ function CompleteProfile() {
         const response = await fetch('/api/complete-profile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ 
-            email,
             full_name: fullName, 
             birth_date: birthDate 
           })
@@ -200,10 +200,10 @@ function CompleteProfile() {
                 {isLoading ? (
                   <>
                     <AiOutlineLoading3Quarters className="w-5 h-5 animate-spin" />
-                    {signupMethod === 'google' ? 'Completing...' : 'Creating account...'}
+                    {signupMethod === 'google' ? 'Completing...' : 'Updating...'}
                   </>
                 ) : (
-                  signupMethod === 'google' ? 'Complete Profile' : 'Create account'
+                  signupMethod === 'google' ? 'Complete Profile' : 'Update Profile'
                 )}
               </button>
             </form>

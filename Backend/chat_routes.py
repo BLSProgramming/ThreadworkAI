@@ -153,37 +153,57 @@ def chat():
                         for label, resp in successful_responses
                     ])
                     
-                    synthesis_prompt = f"""ROLE: You are a synthesis expert. Cross-check multiple model responses to reduce hallucinations and produce one accurate, actionable answer.
+                    synthesis_prompt = f"""ROLE: You are a synthesis expert with authority to validate responses against domain standards. Cross-check multiple model responses, identify errors, and produce one accurate, actionable answer using canonical knowledge when needed.
 
 USER QUESTION:
 {user_message}
 
-MODEL RESPONSES (treat as independent claims to verify against each other):
+MODEL RESPONSES (treat as independent claims requiring validation):
 {formatted_responses}
 
 SYNTHESIS METHOD:
-- Extract key claims from each response and compare for agreement, contradiction, and gaps.
-- Prefer statements backed by multiple responses; mark each point with support counts like "supported by 3/4". Singletons are low-confidence and must be labeled as such.
-- Where no agreement exists on a numeric or critical step, choose a safe, canonical default from common practice and label it "canonical default" (only when such a default is widely accepted).
-- Where responses disagree, explain both sides briefly and choose the stronger with justification (specificity, internal consistency, plausibility, or ability to externally verify). Offer a quick corrective if the weaker path is taken.
-- Do not invent facts not present in at least one response; never fabricate numbers.
+1. Extract key claims and compare for agreement, contradiction, and gaps.
+2. For each claim, assign support count (e.g., "3/4 models agree").
+3. VALIDATE PLAUSIBILITY: If consensus contradicts well-established domain knowledge (e.g., recipe proportions, standard procedures, widely known facts), apply a CANONICAL OVERRIDE with justification.
+4. For recipes: validate core ingredient ratios, temperatures, and techniques against classic published recipes. Common red velvet standards: 1¾–2 cups sugar, ½ cup oil, 2–3 Tbsp cocoa, 2 cups flour, buttermilk+acid+baking soda chemistry.
+5. For technical/procedural questions: check against authoritative references or first principles.
+6. Label corrections as "canonical override" and briefly explain the standard used.
+7. Singletons are low-confidence unless they match a known standard missing from other responses.
 
-OUTPUT STRUCTURE (two sections):
+OUTPUT STRUCTURE (MANDATORY - ALL FOUR SECTIONS REQUIRED):
+
 REASONING
-1) Consensus: Bullets with support counts (e.g., "supported by 3/4"); flag low-confidence if only 1 supports.
-2) Conflicts: Bullets noting each side, support counts, which side is stronger, and why; add a quick check/corrective.
-3) Evidence & Checks: 2–4 brief validations or heuristics users can run (tests, formulas, observable cues) for the critical points above.
+
+1) Consensus
+- List claims supported by 2+ models with counts (e.g., "supported by 3/4")
+- Flag any that are implausible despite support
+
+2) Conflicts  
+- List disagreements with support counts for each side
+- State which side is chosen and why (plausibility, domain knowledge, verifiability)
+- Note any canonical overrides applied
+
+3) Evidence & Checks
+- Provide 3–4 testable validations, heuristics, or external checks
+- Include observable cues (texture, timing, measurements) users can verify
 
 VERDICT
-4) Final Answer: Concise synthesis that resolves conflicts and gives clear steps or guidance. Length target: 150–220 words. Keep anonymized.
 
-STYLE RULES:
-- Anonymity: Do NOT mention model names or quote raw text.
-- Clarity: Use bullets and numbered steps; remove redundancy and jargon.
-- Uncertainty: If something cannot be confirmed, say so and give a verification step.
-- Tone: Professional, direct, immediately useful.
+4) Final Answer
+- Provide complete, step-by-step guidance incorporating all canonical corrections
+- For recipes: full ingredient list with corrected quantities, complete method
+- Length: 200–300 words minimum to ensure completeness
+- Use numbered steps, bullet points for clarity
+- Must be self-contained and immediately actionable
 
-Return only the sections above—no preamble or extra commentary."""
+CRITICAL RULES:
+- DO NOT TRUNCATE. Complete all four sections fully.
+- Apply canonical overrides when consensus is implausible.
+- Anonymize: never mention model names.
+- If uncertain, state uncertainty and provide validation method.
+- Professional, direct tone.
+
+Generate the complete output now:"""
                     
                     try:
                         start_time = time.time()

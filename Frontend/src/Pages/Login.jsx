@@ -19,13 +19,28 @@ function Login() {
       const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ email, password })
       });
 
       const data = await res.json();
 
       if (res.ok) {
-        navigate('/home');
+        // After successful login, check whether the profile is complete
+        try {
+          const profileRes = await fetch('/api/check-profile', { credentials: 'include' });
+          const profileData = await profileRes.json();
+
+          if (profileRes.ok && profileData.profileComplete) {
+            navigate('/home');
+          } else {
+            navigate('/complete-profile', { state: { email, isExistingUser: true } });
+          }
+        } catch (checkErr) {
+          console.error('Profile check error:', checkErr);
+          // On any check failure, fall back to home to avoid blocking login
+          navigate('/home');
+        }
       } else {
         setError(data.error || 'Login failed');
       }

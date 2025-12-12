@@ -99,9 +99,232 @@ function HomePage() {
     );
   };
 
-  // Render text with headings, lists, inline bold, links, YouTube embeds, and fenced code blocks
+  // Parse reasoning into subsections: Consensus, Conflicts, Evidence & Checks
+  const parseReasoningSubsections = (text) => {
+    const subsections = [];
+    
+    // Extract Consensus
+    const consensusMatch = text.match(/1\)\s*Consensus([\s\S]*?)(?=2\)|$)/i);
+    if (consensusMatch) {
+      subsections.push({
+        title: 'Consensus',
+        content: consensusMatch[1].trim(),
+        icon: '✓',
+      });
+    }
+    
+    // Extract Conflicts
+    const conflictsMatch = text.match(/2\)\s*Conflicts([\s\S]*?)(?=3\)|$)/i);
+    if (conflictsMatch) {
+      subsections.push({
+        title: 'Conflicts',
+        content: conflictsMatch[1].trim(),
+        icon: '⚡',
+      });
+    }
+    
+    // Extract Evidence & Checks
+    const evidenceMatch = text.match(/3\)\s*Evidence\s*&\s*Checks([\s\S]*?)(?=4\)|$|VERDICT)/i);
+    if (evidenceMatch) {
+      subsections.push({
+        title: 'Evidence & Checks',
+        content: evidenceMatch[1].trim(),
+        icon: '🔍',
+      });
+    }
+    
+    return subsections.length > 0 ? subsections : null;
+  };
+
+  // Render reasoning with collapsible subsections
+  const renderReasoningWithSubsections = (text, styleConfig) => {
+    const subsections = parseReasoningSubsections(text);
+    if (!subsections) {
+      return renderFormattedContent(text, styleConfig);
+    }
+    
+    return (
+      <div className="space-y-3">
+        {subsections.map((subsection, idx) => (
+          <div key={idx} className="bg-white border border-purple-300 rounded-lg overflow-hidden">
+            <Collapsible
+              defaultOpen={false}
+              titleClassName="px-4 py-3 text-xs font-bold text-purple-700 uppercase tracking-wider"
+              title={
+                <span className="flex items-center gap-2">
+                  {subsection.icon} {subsection.title}
+                </span>
+              }
+              showCollapseButton={true}
+              collapseButtonClassName="bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg"
+            >
+              <div className="px-4 pb-4 pt-2 space-y-3 bg-purple-50">
+                {renderFormattedContent(subsection.content, styleConfig)}
+              </div>
+            </Collapsible>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Parse synthesis output into structured sections
+  const parseSynthesis = (text) => {
+    if (!text) return null;
+    
+    // Check if this looks like synthesis output with REASONING/VERDICT
+    const hasReasoningSection = /^REASONING/im.test(text);
+    const hasVerdictSection = /^VERDICT/im.test(text);
+    
+    if (!hasReasoningSection && !hasVerdictSection) {
+      return null; // Not a synthesis output
+    }
+    
+    // Split into sections
+    const reasoningMatch = text.match(/REASONING\s*\n([\s\S]*?)(?=VERDICT|$)/i);
+    const verdictMatch = text.match(/VERDICT\s*\n([\s\S]*?)$/i);
+    
+    return {
+      reasoning: reasoningMatch ? reasoningMatch[1].trim() : '',
+      verdict: verdictMatch ? verdictMatch[1].trim() : '',
+    };
+  };
+
+  // Render synthesis with distinct section styling as separate collapsible cards
+  const renderSynthesis = (text) => {
+    const sections = parseSynthesis(text);
+    if (!sections) {
+      return renderFormattedContent(text);
+    }
+    
+    return (
+      <div className="space-y-4">
+        {sections.reasoning && (
+          <div className="bg-purple-50 border border-purple-200 rounded-lg shadow-sm overflow-hidden">
+            <Collapsible
+              defaultOpen={false}
+              titleClassName="px-4 py-3 text-xs font-bold text-purple-700 uppercase tracking-wider"
+              title={
+                <span className="flex items-center gap-2">
+                  🧠 Reasoning & Analysis
+                </span>
+              }
+              showCollapseButton={true}
+              collapseButtonClassName="bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg"
+            >
+              <div className="px-4 pb-4 pt-2 space-y-4 text-gray-700">
+                {renderReasoningWithSubsections(sections.reasoning, {
+                  headingClass: 'text-purple-700',
+                  bulletColor: 'text-purple-600',
+                })}
+              </div>
+            </Collapsible>
+          </div>
+        )}
+        
+        {sections.verdict && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-emerald-200 bg-emerald-100">
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 flex items-center gap-2">
+                ✓ Final Answer
+              </span>
+            </div>
+            <div className="px-4 py-4 space-y-4 text-gray-800">
+              {renderFormattedContent(sections.verdict, {
+                headingClass: 'text-emerald-700',
+                bulletColor: 'text-emerald-600',
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Parse markdown tables into structured data
+  const parseMarkdownTable = (tableStr) => {
+    const lines = tableStr.trim().split('\n').map(l => l.trim());
+    if (lines.length < 3) return null;
+    
+    // Extract header
+    const headerLine = lines[0];
+    const separator = lines[1];
+    const dataLines = lines.slice(2);
+    
+    // Check if valid table (separator should contain dashes and pipes)
+    if (!separator.includes('-') || !separator.includes('|')) return null;
+    
+    const headers = headerLine.split('|').map(h => h.trim()).filter(h => h);
+    const rows = dataLines.map(line => 
+      line.split('|').map(cell => cell.trim()).filter(cell => cell)
+    ).filter(row => row.length === headers.length);
+    
+    return { headers, rows };
+  };
+
+  // Render markdown table as HTML
+  const renderTable = (tableStr) => {
+    const table = parseMarkdownTable(tableStr);
+    if (!table) return <p className="text-sm text-gray-600">{tableStr}</p>;
+    
+    return (
+      <div className="overflow-x-auto my-4 rounded-lg border border-gray-300">
+        <table className="w-full text-sm border-collapse bg-white">
+          <thead className="bg-gray-100 border-b-2 border-gray-300">
+            <tr>
+              {table.headers.map((h, i) => (
+                <th key={i} className="px-3 py-2 text-left font-semibold text-gray-700 border-r last:border-r-0">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {table.rows.map((row, ri) => (
+              <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-gray-50 border-b border-gray-200'}>
+                {row.map((cell, ci) => (
+                  <td key={ci} className="px-3 py-2 text-gray-700 border-r last:border-r-0 border-gray-200">
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  // Render text with headings, lists, inline bold, links, YouTube embeds, tables, and fenced code blocks
   const renderFormattedContent = (text, { headingClass = 'text-indigo-700', bulletColor = 'text-indigo-600' } = {}) => {
     if (!text) return null;
+
+    // Split text by tables first (markdown table pattern)
+    const tablePattern = /(\n\|[^\n]+\|[^\n]*(?:\n\|[-\s|:]+\|[^\n]*)+(?:\n\|[^\n]+\|[^\n]*)*)/g;
+    const parts = text.split(tablePattern);
+    
+    return (
+      <div>
+        {parts.map((part, partIdx) => {
+          // Check if this part is a table
+          if (tablePattern.test(part)) {
+            return <div key={partIdx}>{renderTable(part)}</div>;
+          }
+          
+          // Otherwise, process as regular formatted content
+          return (
+            <div key={partIdx}>
+              {renderRegularContent(part, { headingClass, bulletColor })}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Render regular (non-table) formatted content
+  const renderRegularContent = (text, { headingClass = 'text-indigo-700', bulletColor = 'text-indigo-600' } = {}) => {
+    if (!text || text.trim().length === 0) return null;
 
     const extractYouTubeId = (url) => {
       const patterns = [
@@ -966,10 +1189,7 @@ function HomePage() {
                             collapseButtonClassName="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-lg font-semibold"
                           >
                             <div className="px-4 pb-4 pt-2 space-y-3 text-sm text-gray-800">
-                              {renderFormattedContent(message.text || 'No response', {
-                                headingClass: 'text-indigo-700',
-                                bulletColor: 'text-indigo-600',
-                              })}
+                              {renderSynthesis(message.text || 'No response')}
                             </div>
                           </Collapsible>
                         </div>
