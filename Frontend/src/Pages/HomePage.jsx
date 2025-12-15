@@ -101,15 +101,26 @@ function HomePage() {
 
   // Parse synthesis output using === delimiters
   const parseSynthesisNew = (text) => {
-    if (!text) return null;
+    if (!text) {
+      console.warn('[DEBUG] parseSynthesisNew: text is empty');
+      return null;
+    }
+    
+    console.log('[DEBUG] parseSynthesisNew input length:', text.length);
+    console.log('[DEBUG] First 200 chars:', text.substring(0, 200));
     
     // Check for new format with === markers
     const hasNewFormat = text.includes('===REASONING===') || text.includes('===ANSWER===');
+    console.log('[DEBUG] Has new format markers:', hasNewFormat);
     
     if (hasNewFormat) {
       const reasoningMatch = text.match(/===REASONING===\s*([\s\S]*?)(?====ANSWER===|$)/i);
       const answerMatch = text.match(/===ANSWER===\s*([\s\S]*?)(?====TIPS===|$)/i);
       const tipsMatch = text.match(/===TIPS===\s*([\s\S]*?)$/i);
+      
+      console.log('[DEBUG] Reasoning found:', !!reasoningMatch, reasoningMatch ? reasoningMatch[1].length : 0, 'chars');
+      console.log('[DEBUG] Answer found:', !!answerMatch, answerMatch ? answerMatch[1].length : 0, 'chars');
+      console.log('[DEBUG] Tips found:', !!tipsMatch, tipsMatch ? tipsMatch[1].length : 0, 'chars');
       
       return {
         reasoning: reasoningMatch ? reasoningMatch[1].trim() : '',
@@ -121,6 +132,8 @@ function HomePage() {
     
     // Fallback to old REASONING/VERDICT format
     const hasOldFormat = /^REASONING/im.test(text) || /^VERDICT/im.test(text);
+    console.log('[DEBUG] Has old format:', hasOldFormat);
+    
     if (hasOldFormat) {
       const reasoningMatch = text.match(/REASONING\s*\n([\s\S]*?)(?=VERDICT|$)/i);
       const verdictMatch = text.match(/VERDICT\s*\n([\s\S]*?)$/i);
@@ -132,17 +145,27 @@ function HomePage() {
       };
     }
     
+    console.warn('[DEBUG] No recognized format found');
     return null;
   };
 
   // Parse reasoning into subsections for separate collapsible boxes
   const parseReasoningSections = (text) => {
-    if (!text) return null;
+    if (!text) {
+      console.warn('[DEBUG] parseReasoningSections: text is empty');
+      return null;
+    }
+    
+    console.log('[DEBUG] parseReasoningSections input length:', text.length);
     
     // Split by bold headers - be flexible with format variations
     const consensusMatch = text.match(/\*\*Consensus\*\*[^•\n]*\n?([\s\S]*?)(?=\*\*Conflicts?\*\*|\*\*Checks?\*\*|$)/i);
     const conflictsMatch = text.match(/\*\*Conflicts?\*\*[^•\n]*\n?([\s\S]*?)(?=\*\*Checks?\*\*|$)/i);
     const checksMatch = text.match(/\*\*Checks?\*\*[^•\n]*\n?([\s\S]*?)$/i);
+    
+    console.log('[DEBUG] Consensus match:', !!consensusMatch, consensusMatch ? consensusMatch[1].length : 0, 'chars');
+    console.log('[DEBUG] Conflicts match:', !!conflictsMatch, conflictsMatch ? conflictsMatch[1].length : 0, 'chars');
+    console.log('[DEBUG] Checks match:', !!checksMatch, checksMatch ? checksMatch[1].length : 0, 'chars');
     
     const consensus = consensusMatch ? consensusMatch[1].trim() : '';
     const conflicts = conflictsMatch ? conflictsMatch[1].trim() : '';
@@ -150,23 +173,46 @@ function HomePage() {
     
     // Only return if we found at least one section
     if (!consensus && !conflicts && !checks) {
+      console.warn('[DEBUG] No reasoning sections found');
       return null;
     }
     
+    console.log('[DEBUG] Successfully parsed reasoning sections');
     return { consensus, conflicts, checks };
   };
 
   // Simple rendering for synthesis sections
   const renderSynthesis = (text) => {
+    console.log('[DEBUG] renderSynthesis called with text length:', text ? text.length : 'null');
+    
     const sections = parseSynthesisNew(text);
     
     if (!sections) {
+      console.warn('[DEBUG] renderSynthesis: sections is null, rendering as plain content');
       // Not synthesis format - render as plain content
       return renderFormattedContent(text);
     }
     
+    console.log('[DEBUG] renderSynthesis sections parsed:', {
+      hasReasoning: !!sections.reasoning,
+      reasoningLen: sections.reasoning.length,
+      hasAnswer: !!sections.answer,
+      answerLen: sections.answer.length,
+      hasTips: !!sections.tips,
+      tipsLen: sections.tips.length,
+    });
+    
     // Parse reasoning into subsections
     const reasoningSubs = parseReasoningSections(sections.reasoning);
+    
+    console.log('[DEBUG] renderSynthesis reasoningSubs:', reasoningSubs ? {
+      hasConsensus: !!reasoningSubs.consensus,
+      consensusLen: reasoningSubs.consensus.length,
+      hasConflicts: !!reasoningSubs.conflicts,
+      conflictsLen: reasoningSubs.conflicts.length,
+      hasChecks: !!reasoningSubs.checks,
+      checksLen: reasoningSubs.checks.length,
+    } : 'null');
 
     return (
       <div className="space-y-4">
@@ -182,9 +228,9 @@ function HomePage() {
                 </span>
               }
               showCollapseButton={true}
-              collapseButtonClassName="bg-emerald-500 text-white hover:bg-emerald-400 rounded-lg"
+              collapseButtonClassName="mt-2 bg-emerald-500 text-white hover:bg-emerald-400 rounded-lg"
             >
-              <div className="px-5 py-4 space-y-4 text-gray-800">
+              <div className="px-5 py-4 pb-12 space-y-4 text-gray-800">
                 {renderFormattedContent(sections.answer, {
                   headingClass: 'text-emerald-700',
                   bulletColor: 'text-emerald-600',
@@ -206,7 +252,7 @@ function HomePage() {
                 </span>
               }
               showCollapseButton={true}
-              collapseButtonClassName="bg-amber-200 text-amber-700 hover:bg-amber-300 rounded-lg"
+              collapseButtonClassName="mt-2 bg-amber-200 text-amber-700 hover:bg-amber-300 rounded-lg"
             >
               <div className="px-4 py-3 space-y-2 text-gray-700 text-sm">
                 {renderFormattedContent(sections.tips, {
@@ -222,7 +268,7 @@ function HomePage() {
         {reasoningSubs && (reasoningSubs.consensus || reasoningSubs.conflicts) && (
           <div className="bg-purple-50 border border-purple-200 rounded-lg shadow-sm overflow-hidden">
             <Collapsible
-              defaultOpen={false}
+              defaultOpen={!reasoningSubs.conflicts}
               titleClassName="px-4 py-3 text-xs font-bold text-purple-700 uppercase tracking-wider"
               title={
                 <span className="flex items-center gap-2">
@@ -235,9 +281,10 @@ function HomePage() {
               <div className="px-4 pb-4 pt-2 space-y-3 text-gray-700 text-sm">
                 {reasoningSubs.consensus && (
                   <div>
-                    <h4 className="font-bold text-purple-700 text-sm mb-1 flex items-center gap-1">
+                    <h4 className="font-bold text-purple-700 text-sm mb-2 flex items-center gap-1">
                       ✓ Consensus
                     </h4>
+                    <p className="text-xs text-purple-600 mb-2 italic">All models agreed on these points:</p>
                     {renderFormattedContent(reasoningSubs.consensus, {
                       headingClass: 'text-purple-700',
                       bulletColor: 'text-purple-600',
@@ -245,13 +292,14 @@ function HomePage() {
                   </div>
                 )}
                 {reasoningSubs.conflicts && (
-                  <div className="mt-3 pt-3 border-t border-purple-200">
-                    <h4 className="font-bold text-purple-700 text-sm mb-1 flex items-center gap-1">
-                      ⚡ Conflicts
+                  <div className="mt-3 pt-3 border-t border-purple-200 bg-orange-50 -mx-4 -mb-4 px-4 py-3 rounded-b-lg">
+                    <h4 className="font-bold text-orange-700 text-sm mb-2 flex items-center gap-1">
+                      ⚡ Where Models Disagreed
                     </h4>
+                    <p className="text-xs text-orange-600 mb-2 italic">Models had different opinions on these items. The choice below explains the reasoning:</p>
                     {renderFormattedContent(reasoningSubs.conflicts, {
-                      headingClass: 'text-purple-700',
-                      bulletColor: 'text-purple-600',
+                      headingClass: 'text-orange-700',
+                      bulletColor: 'text-orange-600',
                     })}
                   </div>
                 )}
@@ -261,19 +309,20 @@ function HomePage() {
         )}
         
         {reasoningSubs && reasoningSubs.checks && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="bg-blue-50 border-2 border-blue-300 rounded-lg shadow-sm overflow-hidden">
             <Collapsible
-              defaultOpen={false}
+              defaultOpen={true}
               titleClassName="px-4 py-3 text-xs font-bold text-blue-700 uppercase tracking-wider"
               title={
                 <span className="flex items-center gap-2">
-                  🔍 Verification
+                  🔍 How to Verify This Answer
                 </span>
               }
               showCollapseButton={true}
-              collapseButtonClassName="bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg"
+              collapseButtonClassName="mt-2 bg-blue-200 text-blue-700 hover:bg-blue-300 rounded-lg"
             >
-              <div className="px-4 pb-4 pt-2 space-y-3 text-gray-700 text-sm">
+              <div className="px-4 pb-4 pt-2 space-y-3 text-gray-700 text-sm bg-white">
+                <p className="text-xs text-blue-600 italic mb-2">Use these checks to confirm the answer is correct before you start:</p>
                 {renderFormattedContent(reasoningSubs.checks, {
                   headingClass: 'text-blue-700',
                   bulletColor: 'text-blue-600',
@@ -295,7 +344,7 @@ function HomePage() {
                 </span>
               }
               showCollapseButton={true}
-              collapseButtonClassName="bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg"
+              collapseButtonClassName="mt-2 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg"
             >
               <div className="px-4 pb-4 pt-2 space-y-3 text-gray-700 text-sm">
                 {renderFormattedContent(sections.reasoning, {
@@ -901,10 +950,10 @@ function HomePage() {
                   : m
               );
             } else {
-              // Create new bot message
+              // Create new bot message - start with empty text, will be filled by synthesis
               const newBotMessage = {
                 id: userMessage.id + 1,
-                text: synthesisResponse || `Received response from ${model}...`,
+                text: null, // Don't show placeholder - wait for synthesis
                 sender: 'bot',
                 model: 'Threadwork AI',
                 allResponses: allResponses,
@@ -916,6 +965,12 @@ function HomePage() {
         // onSynthesis - handle synthesis response when it arrives
         (synthesisData) => {
           const { response } = synthesisData;
+          console.log('[DEBUG] Synthesis received, length:', response.length);
+          console.log('[DEBUG] Synthesis first 300 chars:', response.substring(0, 300));
+          console.log('[DEBUG] Has ===REASONING===:', response.includes('===REASONING==='));
+          console.log('[DEBUG] Has ===ANSWER===:', response.includes('===ANSWER==='));
+          console.log('[DEBUG] Has ===TIPS===:', response.includes('===TIPS==='));
+          
           synthesisResponse = response;
           synthesisMs = performance.now() - startTs;
 
@@ -1160,7 +1215,7 @@ function HomePage() {
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Threadwork AI</p>
-              <h1 className="text-2xl font-semibold text-gray-900">Multi-model copilot</h1>
+              <h1 className="text-2xl font-semibold text-gray-900">Unified Intelligence Engine</h1>
             </div>
             <div className="flex items-center gap-3 text-sm text-gray-600">
               <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full">Synthesized answers</span>
@@ -1263,7 +1318,7 @@ function HomePage() {
                                   titleClassName={`px-4 py-3 text-xs font-bold ${item.heading} uppercase tracking-wider font-mono`}
                                   title={item.title}
                                   showCollapseButton={true}
-                                  collapseButtonClassName={`${item.collapse} rounded-lg`}
+                                  collapseButtonClassName={`mt-2 ${item.collapse} rounded-lg`}
                                 >
                                   <div className="px-4 pb-4 pt-2 space-y-3 text-sm text-gray-900">
                                     {renderFormattedContent(message.allResponses[item.key] || 'No response', {
@@ -1279,27 +1334,36 @@ function HomePage() {
 
                       <div className="flex-[2.25]">
                         <div className="bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900 rounded-xl rounded-bl-none h-fit shadow-sm" key={`detail-${message.id}`}>
-                          <Collapsible
-                            defaultOpen={message.id === lastBotId}
-                            titleClassName="px-4 py-3 text-xs font-bold text-indigo-700 uppercase tracking-wider font-mono"
-                            title={<span className="flex items-center gap-3">
-                              <span className="text-emerald-600">✓</span>
-                              {message.model ? message.model : 'Threadwork AI'}
-                              {message.timings && (
-                                <span className="ml-auto flex items-center gap-2 text-[10px] text-gray-600 bg-gray-100 px-2 py-1 rounded">
-                                  <span>first: {Math.round(message.timings.firstModelMs)}ms</span>
-                                  <span>syn: {Math.round(message.timings.synthesisMs || 0)}ms</span>
-                                  <span>total: {Math.round(message.timings.totalMs)}ms</span>
-                                </span>
-                              )}
-                            </span>}
-                            showCollapseButton={false}
-                            collapseButtonClassName="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-lg font-semibold"
-                          >
-                            <div className="px-4 pb-4 pt-2 space-y-3 text-sm text-gray-800">
-                              {renderSynthesis(message.text || 'No response')}
+                          {message.text ? (
+                            <Collapsible
+                              defaultOpen={message.id === lastBotId}
+                              titleClassName="px-4 py-3 text-xs font-bold text-indigo-700 uppercase tracking-wider font-mono"
+                              title={<span className="flex items-center gap-3">
+                                <span className="text-emerald-600">✓</span>
+                                {message.model ? message.model : 'Threadwork AI'}
+                                {message.timings && (
+                                  <span className="ml-auto flex items-center gap-2 text-[10px] text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                                    <span>first: {Math.round(message.timings.firstModelMs)}ms</span>
+                                    <span>syn: {Math.round(message.timings.synthesisMs || 0)}ms</span>
+                                    <span>total: {Math.round(message.timings.totalMs)}ms</span>
+                                  </span>
+                                )}
+                              </span>}
+                              showCollapseButton={false}
+                              collapseButtonClassName="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-lg font-semibold"
+                            >
+                              <div className="px-4 pb-4 pt-2 space-y-3 text-sm text-gray-800">
+                                {renderSynthesis(message.text)}
+                              </div>
+                            </Collapsible>
+                          ) : (
+                            <div className="px-4 py-8 text-center">
+                              <div className="inline-block">
+                                <div className="animate-spin h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full"></div>
+                              </div>
+                              <p className="mt-3 text-sm text-gray-600">Synthesizing response...</p>
                             </div>
-                          </Collapsible>
+                          )}
                         </div>
                       </div>
                     </div>
