@@ -99,142 +99,211 @@ function HomePage() {
     );
   };
 
-  // Parse reasoning into subsections: Consensus, Conflicts, Evidence & Checks
-  const parseReasoningSubsections = (text) => {
-    const subsections = [];
-    
-    // Extract Consensus
-    const consensusMatch = text.match(/1\)\s*Consensus([\s\S]*?)(?=2\)|$)/i);
-    if (consensusMatch) {
-      subsections.push({
-        title: 'Consensus',
-        content: consensusMatch[1].trim(),
-        icon: '✓',
-      });
-    }
-    
-    // Extract Conflicts
-    const conflictsMatch = text.match(/2\)\s*Conflicts([\s\S]*?)(?=3\)|$)/i);
-    if (conflictsMatch) {
-      subsections.push({
-        title: 'Conflicts',
-        content: conflictsMatch[1].trim(),
-        icon: '⚡',
-      });
-    }
-    
-    // Extract Evidence & Checks
-    const evidenceMatch = text.match(/3\)\s*Evidence\s*&\s*Checks([\s\S]*?)(?=4\)|$|VERDICT)/i);
-    if (evidenceMatch) {
-      subsections.push({
-        title: 'Evidence & Checks',
-        content: evidenceMatch[1].trim(),
-        icon: '🔍',
-      });
-    }
-    
-    return subsections.length > 0 ? subsections : null;
-  };
-
-  // Render reasoning with collapsible subsections
-  const renderReasoningWithSubsections = (text, styleConfig) => {
-    const subsections = parseReasoningSubsections(text);
-    if (!subsections) {
-      return renderFormattedContent(text, styleConfig);
-    }
-    
-    return (
-      <div className="space-y-3">
-        {subsections.map((subsection, idx) => (
-          <div key={idx} className="bg-white border border-purple-300 rounded-lg overflow-hidden">
-            <Collapsible
-              defaultOpen={false}
-              titleClassName="px-4 py-3 text-xs font-bold text-purple-700 uppercase tracking-wider"
-              title={
-                <span className="flex items-center gap-2">
-                  {subsection.icon} {subsection.title}
-                </span>
-              }
-              showCollapseButton={true}
-              collapseButtonClassName="bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg"
-            >
-              <div className="px-4 pb-4 pt-2 space-y-3 bg-purple-50">
-                {renderFormattedContent(subsection.content, styleConfig)}
-              </div>
-            </Collapsible>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  // Parse synthesis output into structured sections
-  const parseSynthesis = (text) => {
+  // Parse synthesis output using === delimiters
+  const parseSynthesisNew = (text) => {
     if (!text) return null;
     
-    // Check if this looks like synthesis output with REASONING/VERDICT
-    const hasReasoningSection = /^REASONING/im.test(text);
-    const hasVerdictSection = /^VERDICT/im.test(text);
+    // Check for new format with === markers
+    const hasNewFormat = text.includes('===REASONING===') || text.includes('===ANSWER===');
     
-    if (!hasReasoningSection && !hasVerdictSection) {
-      return null; // Not a synthesis output
+    if (hasNewFormat) {
+      const reasoningMatch = text.match(/===REASONING===\s*([\s\S]*?)(?====ANSWER===|$)/i);
+      const answerMatch = text.match(/===ANSWER===\s*([\s\S]*?)(?====TIPS===|$)/i);
+      const tipsMatch = text.match(/===TIPS===\s*([\s\S]*?)$/i);
+      
+      return {
+        reasoning: reasoningMatch ? reasoningMatch[1].trim() : '',
+        answer: answerMatch ? answerMatch[1].trim() : '',
+        tips: tipsMatch ? tipsMatch[1].trim() : '',
+        format: 'new',
+      };
     }
     
-    // Split into sections
-    const reasoningMatch = text.match(/REASONING\s*\n([\s\S]*?)(?=VERDICT|$)/i);
-    const verdictMatch = text.match(/VERDICT\s*\n([\s\S]*?)$/i);
+    // Fallback to old REASONING/VERDICT format
+    const hasOldFormat = /^REASONING/im.test(text) || /^VERDICT/im.test(text);
+    if (hasOldFormat) {
+      const reasoningMatch = text.match(/REASONING\s*\n([\s\S]*?)(?=VERDICT|$)/i);
+      const verdictMatch = text.match(/VERDICT\s*\n([\s\S]*?)$/i);
+      return {
+        reasoning: reasoningMatch ? reasoningMatch[1].trim() : '',
+        answer: verdictMatch ? verdictMatch[1].trim() : '',
+        tips: '',
+        format: 'old',
+      };
+    }
     
-    return {
-      reasoning: reasoningMatch ? reasoningMatch[1].trim() : '',
-      verdict: verdictMatch ? verdictMatch[1].trim() : '',
-    };
+    return null;
   };
 
-  // Render synthesis with distinct section styling as separate collapsible cards
+  // Parse reasoning into subsections for separate collapsible boxes
+  const parseReasoningSections = (text) => {
+    if (!text) return null;
+    
+    // Split by bold headers - be flexible with format variations
+    const consensusMatch = text.match(/\*\*Consensus\*\*[^•\n]*\n?([\s\S]*?)(?=\*\*Conflicts?\*\*|\*\*Checks?\*\*|$)/i);
+    const conflictsMatch = text.match(/\*\*Conflicts?\*\*[^•\n]*\n?([\s\S]*?)(?=\*\*Checks?\*\*|$)/i);
+    const checksMatch = text.match(/\*\*Checks?\*\*[^•\n]*\n?([\s\S]*?)$/i);
+    
+    const consensus = consensusMatch ? consensusMatch[1].trim() : '';
+    const conflicts = conflictsMatch ? conflictsMatch[1].trim() : '';
+    const checks = checksMatch ? checksMatch[1].trim() : '';
+    
+    // Only return if we found at least one section
+    if (!consensus && !conflicts && !checks) {
+      return null;
+    }
+    
+    return { consensus, conflicts, checks };
+  };
+
+  // Simple rendering for synthesis sections
   const renderSynthesis = (text) => {
-    const sections = parseSynthesis(text);
+    const sections = parseSynthesisNew(text);
+    
     if (!sections) {
+      // Not synthesis format - render as plain content
       return renderFormattedContent(text);
     }
     
+    // Parse reasoning into subsections
+    const reasoningSubs = parseReasoningSections(sections.reasoning);
+
     return (
       <div className="space-y-4">
-        {sections.reasoning && (
-          <div className="bg-purple-50 border border-purple-200 rounded-lg shadow-sm overflow-hidden">
+        {/* Main Answer - Collapsible, open by default */}
+        {sections.answer && (
+          <div className="bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-300 rounded-xl shadow-md overflow-hidden">
             <Collapsible
-              defaultOpen={false}
-              titleClassName="px-4 py-3 text-xs font-bold text-purple-700 uppercase tracking-wider"
+              defaultOpen={true}
+              titleClassName="px-5 py-3 bg-gradient-to-r from-emerald-600 to-green-600 text-white font-bold text-lg"
               title={
                 <span className="flex items-center gap-2">
-                  🧠 Reasoning & Analysis
+                  ✓ Answer
                 </span>
               }
               showCollapseButton={true}
-              collapseButtonClassName="bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg"
+              collapseButtonClassName="bg-emerald-500 text-white hover:bg-emerald-400 rounded-lg"
             >
-              <div className="px-4 pb-4 pt-2 space-y-4 text-gray-700">
-                {renderReasoningWithSubsections(sections.reasoning, {
-                  headingClass: 'text-purple-700',
-                  bulletColor: 'text-purple-600',
+              <div className="px-5 py-4 space-y-4 text-gray-800">
+                {renderFormattedContent(sections.answer, {
+                  headingClass: 'text-emerald-700',
+                  bulletColor: 'text-emerald-600',
                 })}
               </div>
             </Collapsible>
           </div>
         )}
         
-        {sections.verdict && (
-          <div className="bg-emerald-50 border border-emerald-200 rounded-lg shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b border-emerald-200 bg-emerald-100">
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 flex items-center gap-2">
-                ✓ Final Answer
-              </span>
-            </div>
-            <div className="px-4 py-4 space-y-4 text-gray-800">
-              {renderFormattedContent(sections.verdict, {
-                headingClass: 'text-emerald-700',
-                bulletColor: 'text-emerald-600',
-              })}
-            </div>
+        {/* Tips - Collapsible, open by default */}
+        {sections.tips && (
+          <div className="bg-amber-50 border border-amber-300 rounded-lg shadow-sm overflow-hidden">
+            <Collapsible
+              defaultOpen={true}
+              titleClassName="px-4 py-2 bg-amber-100 text-amber-700 font-bold text-sm"
+              title={
+                <span className="flex items-center gap-2">
+                  💡 Tips
+                </span>
+              }
+              showCollapseButton={true}
+              collapseButtonClassName="bg-amber-200 text-amber-700 hover:bg-amber-300 rounded-lg"
+            >
+              <div className="px-4 py-3 space-y-2 text-gray-700 text-sm">
+                {renderFormattedContent(sections.tips, {
+                  headingClass: 'text-amber-700',
+                  bulletColor: 'text-amber-600',
+                })}
+              </div>
+            </Collapsible>
+          </div>
+        )}
+        
+        {/* Reasoning - Split into 2 collapsible boxes */}
+        {reasoningSubs && (reasoningSubs.consensus || reasoningSubs.conflicts) && (
+          <div className="bg-purple-50 border border-purple-200 rounded-lg shadow-sm overflow-hidden">
+            <Collapsible
+              defaultOpen={false}
+              titleClassName="px-4 py-3 text-xs font-bold text-purple-700 uppercase tracking-wider"
+              title={
+                <span className="flex items-center gap-2">
+                  🤝 Model Agreement
+                </span>
+              }
+              showCollapseButton={false}
+              collapseButtonClassName="bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg"
+            >
+              <div className="px-4 pb-4 pt-2 space-y-3 text-gray-700 text-sm">
+                {reasoningSubs.consensus && (
+                  <div>
+                    <h4 className="font-bold text-purple-700 text-sm mb-1 flex items-center gap-1">
+                      ✓ Consensus
+                    </h4>
+                    {renderFormattedContent(reasoningSubs.consensus, {
+                      headingClass: 'text-purple-700',
+                      bulletColor: 'text-purple-600',
+                    })}
+                  </div>
+                )}
+                {reasoningSubs.conflicts && (
+                  <div className="mt-3 pt-3 border-t border-purple-200">
+                    <h4 className="font-bold text-purple-700 text-sm mb-1 flex items-center gap-1">
+                      ⚡ Conflicts
+                    </h4>
+                    {renderFormattedContent(reasoningSubs.conflicts, {
+                      headingClass: 'text-purple-700',
+                      bulletColor: 'text-purple-600',
+                    })}
+                  </div>
+                )}
+              </div>
+            </Collapsible>
+          </div>
+        )}
+        
+        {reasoningSubs && reasoningSubs.checks && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg shadow-sm overflow-hidden">
+            <Collapsible
+              defaultOpen={false}
+              titleClassName="px-4 py-3 text-xs font-bold text-blue-700 uppercase tracking-wider"
+              title={
+                <span className="flex items-center gap-2">
+                  🔍 Verification
+                </span>
+              }
+              showCollapseButton={true}
+              collapseButtonClassName="bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg"
+            >
+              <div className="px-4 pb-4 pt-2 space-y-3 text-gray-700 text-sm">
+                {renderFormattedContent(reasoningSubs.checks, {
+                  headingClass: 'text-blue-700',
+                  bulletColor: 'text-blue-600',
+                })}
+              </div>
+            </Collapsible>
+          </div>
+        )}
+        
+        {/* Fallback if reasoning wasn't parsed into subsections */}
+        {sections.reasoning && !reasoningSubs && (
+          <div className="bg-purple-50 border border-purple-200 rounded-lg shadow-sm overflow-hidden">
+            <Collapsible
+              defaultOpen={false}
+              titleClassName="px-4 py-3 text-xs font-bold text-purple-700 uppercase tracking-wider"
+              title={
+                <span className="flex items-center gap-2">
+                  🧠 How we got this answer
+                </span>
+              }
+              showCollapseButton={true}
+              collapseButtonClassName="bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg"
+            >
+              <div className="px-4 pb-4 pt-2 space-y-3 text-gray-700 text-sm">
+                {renderFormattedContent(sections.reasoning, {
+                  headingClass: 'text-purple-700',
+                  bulletColor: 'text-purple-600',
+                })}
+              </div>
+            </Collapsible>
           </div>
         )}
       </div>
@@ -423,6 +492,33 @@ function HomePage() {
         const trimmed = line.trim();
         if (!trimmed) return <div key={key} className="h-2" />;
 
+        // Horizontal rule
+        if (/^-{3,}$/.test(trimmed)) {
+          return <hr key={key} className="my-4 border-t-2 border-gray-300" />;
+        }
+
+        // Bold section header: **Header:** or **Header**
+        const boldHeaderMatch = trimmed.match(/^\*\*([^*:]+):?\*\*:?\s*(.*)$/);
+        if (boldHeaderMatch) {
+          const headerText = boldHeaderMatch[1].trim();
+          const restText = boldHeaderMatch[2].trim();
+          
+          // Special icons for known headers
+          let icon = '';
+          if (/consensus/i.test(headerText)) icon = '✓ ';
+          else if (/conflict/i.test(headerText)) icon = '⚡ ';
+          else if (/check/i.test(headerText)) icon = '🔍 ';
+          
+          return (
+            <div key={key} className="mt-3 mb-1">
+              <h4 className={`font-bold ${headingClass} text-sm inline`}>
+                {icon}{headerText}
+              </h4>
+              {restText && <span className="text-sm text-gray-800 ml-1">{restText}</span>}
+            </div>
+          );
+        }
+
         const subheaderMatch = trimmed.match(/^\*([^*]+)\*$/);
         if (subheaderMatch) {
           return (
@@ -434,6 +530,18 @@ function HomePage() {
 
         if (/^#{1,3}\s/.test(trimmed) || /^[A-Z][A-Za-z\s\-‑]+:$/.test(trimmed) || /^[A-Z][A-Za-z\s\-‑]+\s*\([^)]+\)$/.test(trimmed)) {
           const headerText = trimmed.replace(/^#+\s*/, '').replace(/:$/, '');
+          
+          // Special styling for Equipment and Tips sections
+          if (/^(Equipment|Tips|Notes\s*&\s*Tips)$/i.test(headerText)) {
+            return (
+              <div key={key} className="mt-4 mb-2 px-3 py-2 bg-blue-50 border-l-4 border-blue-400 rounded">
+                <h3 className={`font-bold text-blue-700 text-sm uppercase tracking-wide`}>
+                  {headerText === 'Equipment' ? '🔧 ' : '💡 '}{headerText}
+                </h3>
+              </div>
+            );
+          }
+          
           return (
             <h3 key={key} className={`font-bold ${headingClass} text-sm mt-4 mb-2 uppercase tracking-wide`}>
               {headerText}
@@ -1185,7 +1293,7 @@ function HomePage() {
                                 </span>
                               )}
                             </span>}
-                            showCollapseButton={true}
+                            showCollapseButton={false}
                             collapseButtonClassName="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-lg font-semibold"
                           >
                             <div className="px-4 pb-4 pt-2 space-y-3 text-sm text-gray-800">
