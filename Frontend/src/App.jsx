@@ -20,9 +20,11 @@ function App() {
         <Route path="/complete-profile" element={<AuthWrapper><CompleteProfile /></AuthWrapper>} />
         <Route path="/faq" element={<FAQ />} />
         <Route path="/contact" element={<ContactUs />} />
-        <Route path="/home" element={<AuthWrapper><Layout><HomePage /></Layout></AuthWrapper>} />
-        <Route path="/chat/:chatId" element={<AuthWrapper><Layout><HomePage /></Layout></AuthWrapper>} />
-        <Route path="/settings" element={<AuthWrapper><Layout><UserSettings /></Layout></AuthWrapper>} />
+        <Route element={<AuthWrapper><Layout /></AuthWrapper>}>
+          <Route path="/home" element={<HomePage />} />
+          <Route path="/chat/:chatId" element={<HomePage />} />
+          <Route path="/settings" element={<UserSettings />} />
+        </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

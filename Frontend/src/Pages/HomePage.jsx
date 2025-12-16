@@ -44,6 +44,18 @@ function HomePage() {
     return Array.from(set).sort();
   }, [modelOptions]);
 
+  const selectedModelCount = useMemo(
+    () => Object.values(selectedModels).filter(Boolean).length,
+    [selectedModels]
+  );
+
+  const lastBotId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].sender === 'bot') return messages[i].id;
+    }
+    return null;
+  }, [messages]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -102,25 +114,16 @@ function HomePage() {
   // Parse synthesis output using === delimiters
   const parseSynthesisNew = (text) => {
     if (!text) {
-      console.warn('[DEBUG] parseSynthesisNew: text is empty');
       return null;
     }
     
-    console.log('[DEBUG] parseSynthesisNew input length:', text.length);
-    console.log('[DEBUG] First 200 chars:', text.substring(0, 200));
-    
     // Check for new format with === markers
     const hasNewFormat = text.includes('===REASONING===') || text.includes('===ANSWER===');
-    console.log('[DEBUG] Has new format markers:', hasNewFormat);
     
     if (hasNewFormat) {
       const reasoningMatch = text.match(/===REASONING===\s*([\s\S]*?)(?====ANSWER===|$)/i);
       const answerMatch = text.match(/===ANSWER===\s*([\s\S]*?)(?====TIPS===|$)/i);
       const tipsMatch = text.match(/===TIPS===\s*([\s\S]*?)$/i);
-      
-      console.log('[DEBUG] Reasoning found:', !!reasoningMatch, reasoningMatch ? reasoningMatch[1].length : 0, 'chars');
-      console.log('[DEBUG] Answer found:', !!answerMatch, answerMatch ? answerMatch[1].length : 0, 'chars');
-      console.log('[DEBUG] Tips found:', !!tipsMatch, tipsMatch ? tipsMatch[1].length : 0, 'chars');
       
       return {
         reasoning: reasoningMatch ? reasoningMatch[1].trim() : '',
@@ -132,7 +135,6 @@ function HomePage() {
     
     // Fallback to old REASONING/VERDICT format
     const hasOldFormat = /^REASONING/im.test(text) || /^VERDICT/im.test(text);
-    console.log('[DEBUG] Has old format:', hasOldFormat);
     
     if (hasOldFormat) {
       const reasoningMatch = text.match(/REASONING\s*\n([\s\S]*?)(?=VERDICT|$)/i);
@@ -145,27 +147,19 @@ function HomePage() {
       };
     }
     
-    console.warn('[DEBUG] No recognized format found');
     return null;
   };
 
   // Parse reasoning into subsections for separate collapsible boxes
   const parseReasoningSections = (text) => {
     if (!text) {
-      console.warn('[DEBUG] parseReasoningSections: text is empty');
       return null;
     }
-    
-    console.log('[DEBUG] parseReasoningSections input length:', text.length);
     
     // Split by bold headers - be flexible with format variations
     const consensusMatch = text.match(/\*\*Consensus\*\*[^•\n]*\n?([\s\S]*?)(?=\*\*Conflicts?\*\*|\*\*Checks?\*\*|$)/i);
     const conflictsMatch = text.match(/\*\*Conflicts?\*\*[^•\n]*\n?([\s\S]*?)(?=\*\*Checks?\*\*|$)/i);
     const checksMatch = text.match(/\*\*Checks?\*\*[^•\n]*\n?([\s\S]*?)$/i);
-    
-    console.log('[DEBUG] Consensus match:', !!consensusMatch, consensusMatch ? consensusMatch[1].length : 0, 'chars');
-    console.log('[DEBUG] Conflicts match:', !!conflictsMatch, conflictsMatch ? conflictsMatch[1].length : 0, 'chars');
-    console.log('[DEBUG] Checks match:', !!checksMatch, checksMatch ? checksMatch[1].length : 0, 'chars');
     
     const consensus = consensusMatch ? consensusMatch[1].trim() : '';
     const conflicts = conflictsMatch ? conflictsMatch[1].trim() : '';
@@ -173,46 +167,24 @@ function HomePage() {
     
     // Only return if we found at least one section
     if (!consensus && !conflicts && !checks) {
-      console.warn('[DEBUG] No reasoning sections found');
       return null;
     }
     
-    console.log('[DEBUG] Successfully parsed reasoning sections');
     return { consensus, conflicts, checks };
   };
 
   // Simple rendering for synthesis sections
   const renderSynthesis = (text) => {
-    console.log('[DEBUG] renderSynthesis called with text length:', text ? text.length : 'null');
-    
     const sections = parseSynthesisNew(text);
     
     if (!sections) {
-      console.warn('[DEBUG] renderSynthesis: sections is null, rendering as plain content');
       // Not synthesis format - render as plain content
       return renderFormattedContent(text);
     }
     
-    console.log('[DEBUG] renderSynthesis sections parsed:', {
-      hasReasoning: !!sections.reasoning,
-      reasoningLen: sections.reasoning.length,
-      hasAnswer: !!sections.answer,
-      answerLen: sections.answer.length,
-      hasTips: !!sections.tips,
-      tipsLen: sections.tips.length,
-    });
     
     // Parse reasoning into subsections
     const reasoningSubs = parseReasoningSections(sections.reasoning);
-    
-    console.log('[DEBUG] renderSynthesis reasoningSubs:', reasoningSubs ? {
-      hasConsensus: !!reasoningSubs.consensus,
-      consensusLen: reasoningSubs.consensus.length,
-      hasConflicts: !!reasoningSubs.conflicts,
-      conflictsLen: reasoningSubs.conflicts.length,
-      hasChecks: !!reasoningSubs.checks,
-      checksLen: reasoningSubs.checks.length,
-    } : 'null');
 
     return (
       <div className="space-y-4">
@@ -965,12 +937,6 @@ function HomePage() {
         // onSynthesis - handle synthesis response when it arrives
         (synthesisData) => {
           const { response } = synthesisData;
-          console.log('[DEBUG] Synthesis received, length:', response.length);
-          console.log('[DEBUG] Synthesis first 300 chars:', response.substring(0, 300));
-          console.log('[DEBUG] Has ===REASONING===:', response.includes('===REASONING==='));
-          console.log('[DEBUG] Has ===ANSWER===:', response.includes('===ANSWER==='));
-          console.log('[DEBUG] Has ===TIPS===:', response.includes('===TIPS==='));
-          
           synthesisResponse = response;
           synthesisMs = performance.now() - startTs;
 
@@ -1063,11 +1029,6 @@ function HomePage() {
     } catch {}
   };
 
-  const lastBotId = [...messages].reverse().find((m) => m.sender === 'bot')?.id;
-  const filteredModels = modelOptions.filter((opt) =>
-    opt.label.toLowerCase().includes(modelSearch.toLowerCase())
-  );
-
   return (
     <>
       {/* Sticky Model Selection Bar */}
@@ -1096,7 +1057,7 @@ function HomePage() {
               onClick={() => setShowModelDropdown(!showModelDropdown)}
               className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors"
             >
-              <span className="text-sm font-medium text-indigo-700">{Object.values(selectedModels).filter(Boolean).length}/4</span>
+              <span className="text-sm font-medium text-indigo-700">{selectedModelCount}/4</span>
               <svg className={`w-4 h-4 text-indigo-700 transition-transform ${showModelDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
               </svg>
@@ -1156,9 +1117,8 @@ function HomePage() {
                       return matchText && matchTags;
                     })
                     .map((opt) => {
-                      const currentSelected = Object.values(selectedModels).filter(Boolean).length;
                       const isCurrentlySelected = selectedModels[opt.key];
-                      const isMaxed = currentSelected >= 4 && !isCurrentlySelected;
+                      const isMaxed = selectedModelCount >= 4 && !isCurrentlySelected;
 
                       return (
                         <div

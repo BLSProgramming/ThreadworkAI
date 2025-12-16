@@ -67,11 +67,13 @@ function Login() {
       <div className="absolute bottom-1/4 left-1/3 w-80 h-80 bg-violet-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
       
       {/* Logo/Brand in top-left */}
-      <div className="absolute top-6 left-6 z-10">
+      <div className="absolute top-6 left-6 z-999">
         <Link to="/" className="flex items-center gap-2 group">
           <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/20 group-hover:shadow-purple-500/40 transition-all duration-300">
             <span className="text-white font-bold text-lg">T</span>
           </div>
+
+          
           <span className="text-xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent group-hover:from-violet-500 group-hover:to-purple-500 transition-all duration-300">
             Threadwork
           </span>
