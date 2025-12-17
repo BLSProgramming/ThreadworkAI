@@ -6,7 +6,7 @@ import os
 
 load_dotenv()
 
-chat_routes = Blueprint('chat', __name__)
+trial_chat = Blueprint('trial_chat_route', __name__)
 
 # Client used to send chat messages to different models
 client = OpenAI(
@@ -15,16 +15,15 @@ client = OpenAI(
 )
 
 
-@chat_routes.route('/api/chat', methods=['POST'])
-def chat():
+@trial_chat.route('/api/trial-chat', methods=['POST'])
+def trial_chat_route():
     user_id = session.get('user_id')
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
     try:
         data = request.json
         user_message = data.get('message', '').strip()
-        selected_models = data.get('models') or ['deepseek', 'llama', 'glm', 'qwen']
-        selected_models = [model for model in selected_models if model in ['deepseek', 'llama', 'glm', 'qwen']]
+        selected_models = data.get('models') or ['llama', 'qwen']
 
         if not user_message:
             return jsonify({"error": "Message cannot be empty"}), 400
@@ -36,17 +35,9 @@ def chat():
         available_responses = []
 
         model_configs = {
-            "deepseek": {
-                "label": "DeepSeek",
-                "hf_model": "deepseek-ai/DeepSeek-V3.2:novita",
-            },
             "llama": {
                 "label": "Llama",
                 "hf_model": "meta-llama/Llama-3.1-8B-Instruct:novita",
-            },
-            "glm": {
-                "label": "GLM",
-                "hf_model": "zai-org/GLM-4.6:novita",
             },
             "qwen": {
                 "label": "Qwen",
@@ -151,24 +142,6 @@ Synthesis instructions:
                 "model": "GPT-OSS",
                 "response": gpt_oss_response
             })
-
-            connection = get_db_connection()
-            cursor = connection.cursor()
-
-            cursor.execute("""
-            INSERT INTO chats (user_id, model_name, user_message,  model_response)
-            VALUES (%(user_id)s, %(model_name)s, %(user_message)s, %(model_response)s)
-            """, {
-                'user_id': user_id,
-                'model_name': "GPT-OSS",
-                'user_message': user_message,
-                'model_response': gpt_oss_response
-            })
-
-            connection.commit()
-            cursor.close()
-            connection.close()
-
         except Exception as gpt_oss_err:
             print(f"Error calling GPT-OSS: {gpt_oss_err}")
             responses.append({
