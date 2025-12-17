@@ -51,17 +51,12 @@ export async function streamChat(
           const jsonStr = line.slice(6);
           try {
             const event = JSON.parse(jsonStr);
-            console.log('[DEBUG streamChat] Received event type:', event.type, 'data length:', event.data ? JSON.stringify(event.data).length : 'null');
 
             if (event.type === 'model_response') {
-              console.log('[DEBUG streamChat] Model response:', event.data.model);
               onModelResponse(event.data);
             } else if (event.type === 'synthesis') {
-              console.log('[DEBUG streamChat] Synthesis event received, response length:', event.data.response ? event.data.response.length : 'null');
-              console.log('[DEBUG streamChat] Synthesis first 200 chars:', event.data.response ? event.data.response.substring(0, 200) : 'null');
               onSynthesis(event.data);
             } else if (event.type === 'done') {
-              console.log('[DEBUG streamChat] Done event received');
               onDone();
             }
           } catch (e) {

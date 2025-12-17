@@ -841,8 +841,6 @@ function HomePage() {
     e.preventDefault();
     if (!input.trim()) return;
 
-    console.log('[UI] handleSendMessage submit', { chatId, input });
-
     const activeModels = modelOptions
       .filter((opt) => selectedModels[opt.key])
       .map((opt) => opt.key);
@@ -895,7 +893,6 @@ function HomePage() {
     }
     const abortController = new AbortController();
     currentAbortRef.current = abortController;
-    console.log('[UI] created abort controller');
 
     // Timings
     const startTs = performance.now();
@@ -912,7 +909,6 @@ function HomePage() {
         activeModels,
         // onModelResponse - handle each model response as it arrives
         (modelData) => {
-          console.log('[UI] model_response', modelData);
           const { model, response } = modelData;
           allResponses[model.toLowerCase()] = response;
 
@@ -951,7 +947,6 @@ function HomePage() {
         },
         // onSynthesis - handle synthesis response when it arrives
         (synthesisData) => {
-          console.log('[UI] synthesis', synthesisData);
           const { response } = synthesisData;
           synthesisResponse = response;
           synthesisMs = performance.now() - startTs;
@@ -986,7 +981,6 @@ function HomePage() {
         },
         // onDone - stream complete
         () => {
-          console.log('[UI] done');
           setIsLoading(false);
           setMessages((currentMessages) => {
             const merged = currentMessages.map((m) => {
