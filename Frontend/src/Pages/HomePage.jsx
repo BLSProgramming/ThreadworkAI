@@ -6,6 +6,7 @@ import 'prismjs/themes/prism-tomorrow.css';
 import { HiLightningBolt } from '../assets/Icons';
 import Collapsible from '../Components/Collapsible';
 import { streamChat } from '../utils/streamChat';
+import ModelSelector from '../Components/ModelSelector';
 
 function HomePage() {
   const navigate = useNavigate();
@@ -20,10 +21,7 @@ function HomePage() {
     essential: false,
     moonshot: false,
   });
-  const [modelSearch, setModelSearch] = useState('');
-  const [selectedTags, setSelectedTags] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [showModelDropdown, setShowModelDropdown] = useState(false);
   const messagesEndRef = useRef(null);
   const pendingChatRef = useRef(null);
   const isLoadingChatRef = useRef(false);
@@ -37,17 +35,6 @@ function HomePage() {
     { key: 'essential', label: 'Essential', tags: ['Creative', 'Writing', 'General'] },
     { key: 'moonshot', label: 'Moonshot', tags: ['Long Reasoning', 'Planning', 'Multilingual'] },
   ], []);
-
-  const allTags = useMemo(() => {
-    const set = new Set();
-    modelOptions.forEach((m) => (m.tags || []).forEach((t) => set.add(t)));
-    return Array.from(set).sort();
-  }, [modelOptions]);
-
-  const selectedModelCount = useMemo(
-    () => Object.values(selectedModels).filter(Boolean).length,
-    [selectedModels]
-  );
 
   const lastBotId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -133,20 +120,6 @@ function HomePage() {
       };
     }
     
-    // Fallback to old REASONING/VERDICT format
-    const hasOldFormat = /^REASONING/im.test(text) || /^VERDICT/im.test(text);
-    
-    if (hasOldFormat) {
-      const reasoningMatch = text.match(/REASONING\s*\n([\s\S]*?)(?=VERDICT|$)/i);
-      const verdictMatch = text.match(/VERDICT\s*\n([\s\S]*?)$/i);
-      return {
-        reasoning: reasoningMatch ? reasoningMatch[1].trim() : '',
-        answer: verdictMatch ? verdictMatch[1].trim() : '',
-        tips: '',
-        format: 'old',
-      };
-    }
-    
     return null;
   };
 
@@ -226,7 +199,7 @@ function HomePage() {
               showCollapseButton={true}
               collapseButtonClassName="mt-2 bg-amber-200 text-amber-700 hover:bg-amber-300 rounded-lg"
             >
-              <div className="px-4 py-3 space-y-2 text-gray-700 text-sm">
+              <div className="px-4 py-3 pr-14 space-y-2 text-gray-700 text-sm">
                 {renderFormattedContent(sections.tips, {
                   headingClass: 'text-amber-700',
                   bulletColor: 'text-amber-600',
@@ -247,8 +220,8 @@ function HomePage() {
                   🤝 Model Agreement
                 </span>
               }
-              showCollapseButton={false}
-              collapseButtonClassName="bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg"
+              showCollapseButton={true}
+              collapseButtonClassName="mt-2 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg"
             >
               <div className="px-4 pb-4 pt-2 space-y-3 text-gray-700 text-sm">
                 {reasoningSubs.consensus && (
@@ -699,11 +672,27 @@ function HomePage() {
     });
   };
 
+  const persistTimerRef = useRef(null);
+  const pendingPersistRef = useRef(null);
+
+  // Batch localStorage writes to reduce churn during streaming updates
   const persistChats = (updater) => {
     const chats = JSON.parse(localStorage.getItem('chats') || '[]');
     const updated = updater(chats);
-    localStorage.setItem('chats', JSON.stringify(updated));
-    window.dispatchEvent(new Event('chats-updated'));
+    pendingPersistRef.current = updated;
+
+    if (!persistTimerRef.current) {
+      persistTimerRef.current = setTimeout(() => {
+        const payload = pendingPersistRef.current;
+        if (payload) {
+          localStorage.setItem('chats', JSON.stringify(payload));
+          setTimeout(() => window.dispatchEvent(new Event('chats-updated')), 0);
+        }
+        pendingPersistRef.current = null;
+        persistTimerRef.current = null;
+      }, 60);
+    }
+
     return updated;
   };
 
@@ -803,13 +792,35 @@ function HomePage() {
 
   // Auto-scroll and syntax highlighting on message updates
   useEffect(() => {
-    const scrollTimer = setTimeout(() => scrollToBottom(), 50);
-    const highlightTimer = setTimeout(() => Prism.highlightAll(), 0);
+    // Cleanup on unmount: abort any in-flight stream
     return () => {
-      clearTimeout(scrollTimer);
-      clearTimeout(highlightTimer);
+      if (currentAbortRef.current) {
+        try {
+          currentAbortRef.current.abort();
+        } catch {}
+        currentAbortRef.current = null;
+      }
     };
-  }, [messages]);
+  }, []);
+
+  useEffect(() => {
+    // When chatId changes, if we're still loading, abort and clean up
+    if (isLoading && currentAbortRef.current) {
+      try {
+        currentAbortRef.current.abort();
+        currentAbortRef.current = null;
+        setIsLoading(false);
+        // Remove incomplete bot message
+        setMessages((currentMessages) => {
+          const lastMsg = currentMessages[currentMessages.length - 1];
+          if (lastMsg && lastMsg.sender === 'bot' && !lastMsg.text) {
+            return currentMessages.slice(0, -1);
+          }
+          return currentMessages;
+        });
+      } catch {}
+    }
+  }, [chatId]);
 
   useEffect(() => {
     if (chatId && messages.length > 0 && !isLoadingChatRef.current) {
@@ -829,6 +840,8 @@ function HomePage() {
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
+
+    console.log('[UI] handleSendMessage submit', { chatId, input });
 
     const activeModels = modelOptions
       .filter((opt) => selectedModels[opt.key])
@@ -882,6 +895,7 @@ function HomePage() {
     }
     const abortController = new AbortController();
     currentAbortRef.current = abortController;
+    console.log('[UI] created abort controller');
 
     // Timings
     const startTs = performance.now();
@@ -898,6 +912,7 @@ function HomePage() {
         activeModels,
         // onModelResponse - handle each model response as it arrives
         (modelData) => {
+          console.log('[UI] model_response', modelData);
           const { model, response } = modelData;
           allResponses[model.toLowerCase()] = response;
 
@@ -936,27 +951,58 @@ function HomePage() {
         },
         // onSynthesis - handle synthesis response when it arrives
         (synthesisData) => {
+          console.log('[UI] synthesis', synthesisData);
           const { response } = synthesisData;
           synthesisResponse = response;
           synthesisMs = performance.now() - startTs;
 
           setMessages((currentMessages) => {
-            return currentMessages.map((m) =>
-              m.sender === 'bot' && m.id === userMessage.id + 1
-                ? {
-                    ...m,
-                    text: response,
-                    allResponses: allResponses,
-                  }
-                : m
+            const existingBot = currentMessages.find(
+              (m) => m.sender === 'bot' && m.id === userMessage.id + 1
             );
+
+            if (existingBot) {
+              return currentMessages.map((m) =>
+                m.sender === 'bot' && m.id === userMessage.id + 1
+                  ? {
+                      ...m,
+                      text: response,
+                      allResponses: allResponses,
+                    }
+                  : m
+              );
+            }
+
+            // If no bot message exists yet (edge case), create it now
+            const newBotMessage = {
+              id: userMessage.id + 1,
+              text: response,
+              sender: 'bot',
+              model: 'Threadwork AI',
+              allResponses: allResponses,
+            };
+            return [...currentMessages, newBotMessage];
           });
         },
         // onDone - stream complete
         () => {
+          console.log('[UI] done');
           setIsLoading(false);
           setMessages((currentMessages) => {
-            const merged = currentMessages;
+            const merged = currentMessages.map((m) => {
+              if (m.sender === 'bot' && m.id === userMessage.id + 1) {
+                return {
+                  ...m,
+                  timings: {
+                    firstModelMs: firstModelMs,
+                    synthesisMs: synthesisMs,
+                    totalMs: performance.now() - startTs,
+                  },
+                };
+              }
+              return m;
+            });
+
             persistChats((chats) => {
               const chatIndex = chats.findIndex((chat) => chat.id === currentChatId);
               if (chatIndex !== -1) {
@@ -964,23 +1010,18 @@ function HomePage() {
               }
               return chats;
             });
+
             saveChatToDatabase(currentChatId);
             return merged;
           });
-          // Attach timings to the latest bot message
-          setMessages((current) => current.map((m) => {
-            if (m.sender === 'bot' && m.id === userMessage.id + 1) {
-              return { ...m, timings: {
-                firstModelMs: firstModelMs,
-                synthesisMs: synthesisMs,
-                totalMs: performance.now() - startTs,
-              }};
-            }
-            return m;
-          }));
         },
         // onError - handle error
         (error) => {
+          console.log('[UI] error', error);
+          if (error?.name === 'AbortError') {
+            setIsLoading(false);
+            return;
+          }
           console.error('Stream error:', error);
           setIsLoading(false);
           const botMessage = { id: Date.now() + 1, text: 'Error: Could not get response', sender: 'bot' };
@@ -999,6 +1040,10 @@ function HomePage() {
         }
       , abortController.signal);
     } catch (err) {
+      if (err?.name === 'AbortError') {
+        setIsLoading(false);
+        return;
+      }
       console.error('Chat error:', err);
       setIsLoading(false);
       const botMessage = { id: Date.now() + 1, text: 'Network error. Please try again.', sender: 'bot' };
@@ -1025,150 +1070,27 @@ function HomePage() {
         currentAbortRef.current.abort();
         currentAbortRef.current = null;
         setIsLoading(false);
+        // Remove the pending bot message if stream is canceled
+        setMessages((currentMessages) => {
+          const lastMsg = currentMessages[currentMessages.length - 1];
+          if (lastMsg && lastMsg.sender === 'bot' && !lastMsg.text) {
+            // Remove incomplete bot message
+            return currentMessages.slice(0, -1);
+          }
+          return currentMessages;
+        });
       }
     } catch {}
   };
 
   return (
     <>
-      {/* Sticky Model Selection Bar */}
-      <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-3 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold text-gray-900">Active Models:</p>
-            <div className="flex flex-wrap gap-1">
-              {Object.entries(selectedModels)
-                .filter(([_, selected]) => selected)
-                .map(([key, _]) => {
-                  const model = modelOptions.find(m => m.key === key);
-                  return (
-                    <span
-                      key={key}
-                      className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-medium"
-                    >
-                      {model?.label}
-                    </span>
-                  );
-                })}
-            </div>
-          </div>
-          <div className="relative">
-            <button
-              onClick={() => setShowModelDropdown(!showModelDropdown)}
-              className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors"
-            >
-              <span className="text-sm font-medium text-indigo-700">{selectedModelCount}/4</span>
-              <svg className={`w-4 h-4 text-indigo-700 transition-transform ${showModelDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-              </svg>
-            </button>
-
-            {showModelDropdown && (
-              <div className="absolute right-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-                <div className="p-3 border-b border-gray-200">
-                  <input
-                    type="text"
-                    value={modelSearch}
-                    onChange={(e) => setModelSearch(e.target.value)}
-                    placeholder="Search models..."
-                    className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                </div>
-                <div className="p-3 border-b border-gray-200">
-                  <div className="flex flex-wrap gap-2">
-                    {allTags.map((tag) => {
-                      const active = selectedTags.includes(tag);
-                      return (
-                        <button
-                          key={tag}
-                          type="button"
-                          onClick={() =>
-                            setSelectedTags((prev) =>
-                              prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-                            )
-                          }
-                          className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                            active
-                              ? 'bg-indigo-600 text-white border-indigo-600'
-                              : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
-                          }`}
-                        >
-                          {tag}
-                        </button>
-                      );
-                    })}
-                    {selectedTags.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedTags([])}
-                        className="px-2.5 py-1 rounded-full text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div className="max-h-96 overflow-y-auto">
-                  {modelOptions
-                    .filter((opt) => {
-                      const matchText = opt.label.toLowerCase().includes(modelSearch.toLowerCase());
-                      const matchTags =
-                        selectedTags.length === 0 || (opt.tags && selectedTags.some((t) => opt.tags.includes(t)));
-                      return matchText && matchTags;
-                    })
-                    .map((opt) => {
-                      const isCurrentlySelected = selectedModels[opt.key];
-                      const isMaxed = selectedModelCount >= 4 && !isCurrentlySelected;
-
-                      return (
-                        <div
-                          key={opt.key}
-                          className={`flex items-center justify-between px-4 py-3 border-b border-gray-100 last:border-b-0 ${isMaxed ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50 cursor-pointer'}`}
-                          onClick={() => {
-                            if (isCurrentlySelected || currentSelected < 4) {
-                              setSelectedModels((prev) => ({ ...prev, [opt.key]: !prev[opt.key] }));
-                            }
-                          }}
-                        >
-                          <div className="pr-3">
-                            <p className="text-sm font-semibold text-gray-900">{opt.label}</p>
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {(opt.tags || []).map((tag) => (
-                                <span
-                                  key={`${opt.key}-${tag}`}
-                                  className="px-1.5 py-0.5 text-[10px] rounded bg-gray-100 text-gray-700 border border-gray-200"
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={!!selectedModels[opt.key]}
-                            onChange={() => {}}
-                            disabled={isMaxed}
-                            className={`w-4 h-4 text-indigo-600 rounded ${isMaxed ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </div>
-                      );
-                    })}
-                  {modelOptions.filter((opt) => {
-                    const matchText = opt.label.toLowerCase().includes(modelSearch.toLowerCase());
-                    const matchTags = selectedTags.length === 0 || (opt.tags && selectedTags.some((t) => opt.tags.includes(t)));
-                    return matchText && matchTags;
-                  }).length === 0 && (
-                    <div className="text-center py-6 text-sm text-gray-500">
-                      No models match your search and tag filters
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <ModelSelector
+        selectedModels={selectedModels}
+        setSelectedModels={setSelectedModels}
+        modelOptions={modelOptions}
+        maxSelected={4}
+      />
 
       <div className="flex-1 overflow-y-auto bg-gradient-to-b from-gray-50 to-white">
         <div className="max-w-7xl mx-auto px-3 py-6 space-y-6">
