@@ -805,7 +805,13 @@ function HomePage() {
 
   useEffect(() => {
     // When chatId changes, if we're still loading, abort and clean up
+    // BUT: Don't abort if this is a brand new chat being created (pendingChatRef will be set)
     if (isLoading && currentAbortRef.current) {
+      // Check if this chatId matches a pending new chat - if so, don't abort
+      if (pendingChatRef.current && pendingChatRef.current.id === chatId) {
+        return; // Don't abort, this is the new chat we just created
+      }
+      
       try {
         currentAbortRef.current.abort();
         currentAbortRef.current = null;
@@ -854,9 +860,11 @@ function HomePage() {
     const savedInput = input;
 
     let currentChatId = chatId;
+    let isNewChat = false;
     if (!chatId) {
       const newChatId = `chat-${Date.now()}`;
       currentChatId = newChatId;
+      isNewChat = true;
       pendingChatRef.current = { id: newChatId, userMessage: nextMessages };
 
       const chats = JSON.parse(localStorage.getItem('chats') || '[]');
@@ -871,7 +879,8 @@ function HomePage() {
       setTimeout(() => {
         window.dispatchEvent(new Event('chats-updated'));
       }, 0);
-      navigate(`/chat/${newChatId}`);
+      // Delay navigation until after abort controller is set up
+      setTimeout(() => navigate(`/chat/${newChatId}`), 0);
     } else {
       setMessages(nextMessages);
       persistChats((chats) => {
