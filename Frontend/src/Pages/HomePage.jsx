@@ -781,7 +781,8 @@ function HomePage() {
       } else {
         setMessages([]);
       }
-      pendingChatRef.current = null;
+      // Don't clear pendingChatRef here - let the abort useEffect handle it
+      // pendingChatRef.current = null;
     } else {
       setMessages([]);
     }
@@ -806,12 +807,29 @@ function HomePage() {
   useEffect(() => {
     // When chatId changes, if we're still loading, abort and clean up
     // BUT: Don't abort if this is a brand new chat being created (pendingChatRef will be set)
+    console.log('[UI] chatId useEffect fired', { 
+      chatId, 
+      isLoading, 
+      hasAbortController: !!currentAbortRef.current,
+      pendingChatId: pendingChatRef.current?.id,
+      doIdsMatch: pendingChatRef.current?.id === chatId,
+      shouldAbort: isLoading && currentAbortRef.current && !(pendingChatRef.current && pendingChatRef.current.id === chatId)
+    });
+    
     if (isLoading && currentAbortRef.current) {
       // Check if this chatId matches a pending new chat - if so, don't abort
       if (pendingChatRef.current && pendingChatRef.current.id === chatId) {
+        console.log('[UI] This is a new chat we just created, NOT aborting. Clearing pendingChatRef.');
+        pendingChatRef.current = null; // Clear it now that we've matched
         return; // Don't abort, this is the new chat we just created
       }
       
+      console.log('[UI] Aborting stream due to chatId change', {
+        reason: 'chatId changed but not matching pending',
+        pendingId: pendingChatRef.current?.id,
+        newChatId: chatId,
+        comparison: `"${pendingChatRef.current?.id}" === "${chatId}" = ${pendingChatRef.current?.id === chatId}`
+      });
       try {
         currentAbortRef.current.abort();
         currentAbortRef.current = null;
@@ -844,16 +862,38 @@ function HomePage() {
   }, [messages, chatId]);
 
   const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!input.trim()) return;
+    if (e && e.preventDefault) {
+      e.preventDefault();
+    }
+    if (e && e.stopPropagation) {
+      e.stopPropagation();
+    }
+    
+    console.log('[UI] handleSendMessage called', { 
+      hasInput: !!input?.trim(), 
+      inputValue: input,
+      isLoading, 
+      chatId,
+      modelsState: selectedModels 
+    });
+    
+    if (!input || !input.trim()) {
+      console.log('[UI] Empty input, returning');
+      return;
+    }
 
-    console.log('[UI] handleSendMessage submit', { chatId, input });
+    console.log('[UI] handleSendMessage proceeding with submit', { chatId, input });
 
     const activeModels = modelOptions
       .filter((opt) => selectedModels[opt.key])
       .map((opt) => opt.key);
 
-    if (!activeModels.length) return;
+    console.log('[UI] Active models:', activeModels, 'from selectedModels:', selectedModels);
+
+    if (!activeModels.length) {
+      console.warn('[UI] No models selected!');
+      return;
+    }
 
     const userMessage = { id: Date.now(), text: input, sender: 'user' };
     const nextMessages = [...messages, userMessage];
@@ -865,6 +905,10 @@ function HomePage() {
       const newChatId = `chat-${Date.now()}`;
       currentChatId = newChatId;
       isNewChat = true;
+      
+      console.log('[UI] Creating new chat', { newChatId });
+      
+      // Set pending chat ref FIRST before navigation
       pendingChatRef.current = { id: newChatId, userMessage: nextMessages };
 
       const chats = JSON.parse(localStorage.getItem('chats') || '[]');
@@ -879,8 +923,6 @@ function HomePage() {
       setTimeout(() => {
         window.dispatchEvent(new Event('chats-updated'));
       }, 0);
-      // Delay navigation until after abort controller is set up
-      setTimeout(() => navigate(`/chat/${newChatId}`), 0);
     } else {
       setMessages(nextMessages);
       persistChats((chats) => {
@@ -905,6 +947,12 @@ function HomePage() {
     const abortController = new AbortController();
     currentAbortRef.current = abortController;
     console.log('[UI] created abort controller');
+    
+    // Navigate AFTER setting up abort controller
+    if (isNewChat) {
+      console.log('[UI] Navigating to new chat', currentChatId);
+      setTimeout(() => navigate(`/chat/${currentChatId}`), 0);
+    }
 
     // Timings
     const startTs = performance.now();
