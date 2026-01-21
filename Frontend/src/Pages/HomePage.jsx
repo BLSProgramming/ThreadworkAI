@@ -805,8 +805,6 @@ function HomePage() {
   }, []);
 
   useEffect(() => {
-    // When chatId changes, if we're still loading, abort and clean up
-    // BUT: Don't abort if this is a brand new chat being created (pendingChatRef will be set)
     console.log('[UI] chatId useEffect fired', { 
       chatId, 
       isLoading, 
@@ -817,11 +815,10 @@ function HomePage() {
     });
     
     if (isLoading && currentAbortRef.current) {
-      // Check if this chatId matches a pending new chat - if so, don't abort
       if (pendingChatRef.current && pendingChatRef.current.id === chatId) {
         console.log('[UI] This is a new chat we just created, NOT aborting. Clearing pendingChatRef.');
-        pendingChatRef.current = null; // Clear it now that we've matched
-        return; // Don't abort, this is the new chat we just created
+        pendingChatRef.current = null; 
+        return; 
       }
       
       console.log('[UI] Aborting stream due to chatId change', {
@@ -940,7 +937,7 @@ function HomePage() {
 
     setInput('');
     setIsLoading(true);
-    // Setup abort controller for this stream
+ 
     if (currentAbortRef.current) {
       try { currentAbortRef.current.abort(); } catch {}
     }
@@ -948,26 +945,24 @@ function HomePage() {
     currentAbortRef.current = abortController;
     console.log('[UI] created abort controller');
     
-    // Navigate AFTER setting up abort controller
+
     if (isNewChat) {
       console.log('[UI] Navigating to new chat', currentChatId);
       setTimeout(() => navigate(`/chat/${currentChatId}`), 0);
     }
 
-    // Timings
     const startTs = performance.now();
     let firstModelMs = null;
     let synthesisMs = null;
 
     // Collect all responses as they stream in
     const allResponses = {};
-    let synthesisResponse = null;
 
     try {
       await streamChat(
         savedInput,
         activeModels,
-        // onModelResponse - handle each model response as it arrives
+ 
         (modelData) => {
           console.log('[UI] model_response', modelData);
           const { model, response } = modelData;
@@ -977,14 +972,13 @@ function HomePage() {
             firstModelMs = performance.now() - startTs;
           }
 
-          // Update messages with streaming responses
+
           setMessages((currentMessages) => {
             const existingBotMessage = currentMessages.find(
               (m) => m.sender === 'bot' && m.id === userMessage.id + 1
             );
 
             if (existingBotMessage) {
-              // Update existing bot message with new responses
               return currentMessages.map((m) =>
                 m.id === existingBotMessage.id
                   ? {
@@ -994,10 +988,10 @@ function HomePage() {
                   : m
               );
             } else {
-              // Create new bot message - start with empty text, will be filled by synthesis
+
               const newBotMessage = {
                 id: userMessage.id + 1,
-                text: null, // Don't show placeholder - wait for synthesis
+                text: null,
                 sender: 'bot',
                 model: 'Threadwork AI',
                 allResponses: allResponses,
@@ -1006,11 +1000,10 @@ function HomePage() {
             }
           });
         },
-        // onSynthesis - handle synthesis response when it arrives
+  
         (synthesisData) => {
           console.log('[UI] synthesis', synthesisData);
           const { response } = synthesisData;
-          synthesisResponse = response;
           synthesisMs = performance.now() - startTs;
 
           setMessages((currentMessages) => {
@@ -1127,7 +1120,6 @@ function HomePage() {
         currentAbortRef.current.abort();
         currentAbortRef.current = null;
         setIsLoading(false);
-        // Remove the pending bot message if stream is canceled
         setMessages((currentMessages) => {
           const lastMsg = currentMessages[currentMessages.length - 1];
           if (lastMsg && lastMsg.sender === 'bot' && !lastMsg.text) {
