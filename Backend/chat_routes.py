@@ -25,7 +25,7 @@ def chat():
     """
     try:
         data = request.json
-        user_message = data.get('message', '').strip()
+        user_message = f"{data.get('message', '').strip()}. English only"
         selected_models = data.get('models') or ['deepseek', 'llama', 'glm', 'qwen']
         valid_model_names = {'deepseek', 'llama', 'glm', 'qwen', 'essential', 'moonshot'}
         selected_models = [m for m in selected_models if m in valid_model_names]
