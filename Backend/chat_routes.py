@@ -164,7 +164,43 @@ def chat():
                     for result in successful_results
                 ])
                 
-                synthesis_prompt = f"""You are a world-class synthesis expert. Your job is to cross-check {num_models} model responses and produce ONE accurate, trustworthy answer.
+                # Detect if this is a simple factual question
+                user_message_lower = user_message.lower()
+                simple_question_indicators = [
+                    'what is', 'what are', 'who is', 'who are', 'when is', 'when was',
+                    'where is', 'where are', 'capital of', 'how many', 'how much',
+                    'define', 'definition of', 'meaning of'
+                ]
+                is_simple_question = (
+                    len(user_message.split()) <= 15 and  # Short question
+                    any(indicator in user_message_lower for indicator in simple_question_indicators)
+                )
+                
+                if is_simple_question:
+                    # Simplified prompt for factual questions
+                    synthesis_prompt = f"""You are synthesizing {num_models} model responses to answer a factual question.
+
+USER QUESTION:
+{user_message}
+
+MODEL RESPONSES:
+{formatted_responses}
+
+INSTRUCTIONS:
+1. If all models agree, provide a concise, direct answer (1-3 sentences)
+2. If models disagree on key facts, explain which is correct and why (2-4 sentences)
+3. Only include information explicitly stated in the model responses
+4. Do not add extra details, history, or context unless the models provided it
+
+OUTPUT FORMAT:
+===REASONING===
+[Brief 2-3 line summary of consensus or conflict resolution]
+
+===ANSWER===
+[Direct, concise answer matching the question's scope - typically 1-3 sentences for simple facts]"""
+                else:
+                    # Original detailed prompt for complex questions
+                    synthesis_prompt = f"""You are a world-class synthesis expert. Your job is to cross-check {num_models} model responses and produce ONE accurate, trustworthy answer.
 
 CRITICAL PRINCIPLES:
 - Consensus is helpful context, but CORRECTNESS is paramount
@@ -172,6 +208,13 @@ CRITICAL PRINCIPLES:
 - If models conflict, choose based on domain logic, not voting
 - Never average values or split the difference on critical parameters
 - Always choose the SAFER/MORE CONSERVATIVE option for health/safety
+
+STRICT SOURCE-OF-TRUTH RULES (NO HALLUCINATIONS):
+- You may ONLY use facts explicitly stated in the MODEL RESPONSES below.
+- Do NOT invent places, names, dates, quantities, steps, or justifications that are absent from the model responses.
+- If a detail is missing in all responses, say "Not provided by models" rather than guessing.
+- If numbers/units differ, pick ONE during conflict resolution and use it consistently everywhere. Do not create new values.
+- Every concrete claim in ANSWER/REASONING must trace back to at least one model response. No extra flourishes.
 
 CRITICAL: CHECK FOR INTERNAL CONSISTENCY
 - Title/header must match the described scope, components, and final answer
