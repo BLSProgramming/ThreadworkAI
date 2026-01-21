@@ -1,182 +1,153 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { HiLightningBolt, FiCheckCircle, FiTrendingUp, FiUsers, AiOutlineLoading3Quarters } from '../assets/Icons';
+import { AiOutlineLoading3Quarters } from '../assets/Icons';
+import GoogleOAuth from '../Components/GoogleOAuth';
 
 function Login() {
   const navigate = useNavigate();
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const googleButtonRef = useRef(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    // Initialize Google Sign-In
-    const initializeGoogleSignIn = () => {
-      if (window.google) {
-        window.google.accounts.id.initialize({
-          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-          callback: handleGoogleCallback
-        });
+  const handleEmailLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
 
-        // Render the button
-        if (googleButtonRef.current) {
-          window.google.accounts.id.renderButton(
-            googleButtonRef.current,
-            {
-              theme: 'outline',
-              size: 'large',
-              width: googleButtonRef.current.offsetWidth,
-              text: 'continue_with',
-              shape: 'rectangular'
-            }
-          );
-        }
-      }
-    };
-
-    // Check if the Google script is loaded
-    if (window.google) {
-      initializeGoogleSignIn();
-    } else {
-      // Wait for the script to load
-      const checkGoogle = setInterval(() => {
-        if (window.google) {
-          clearInterval(checkGoogle);
-          initializeGoogleSignIn();
-        }
-      }, 100);
-
-      return () => clearInterval(checkGoogle);
-    }
-  }, []);
-
-  const handleGoogleCallback = async (response) => {
-    setIsGoogleLoading(true);
     try {
-      // Send the credential (JWT token) to your backend
-      const res = await fetch('/api/google-login', {
+      const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential: response.credential })
+        credentials: 'include',
+        body: JSON.stringify({ email, password })
       });
-      
+
       const data = await res.json();
-      
+
       if (res.ok) {
-        // Check if user needs to complete profile
-        if (data.needsProfile) {
-          navigate('/complete-profile', { state: { signupMethod: 'google' } });
-        } else {
+        // After successful login, check whether the profile is complete
+        try {
+          const profileRes = await fetch('/api/check-profile', { credentials: 'include' });
+          const profileData = await profileRes.json();
+
+          if (profileRes.ok && profileData.profileComplete) {
+            navigate('/home');
+          } else {
+            navigate('/complete-profile', { state: { email, isExistingUser: true } });
+          }
+        } catch (checkErr) {
+          console.error('Profile check error:', checkErr);
+          // On any check failure, fall back to home to avoid blocking login
           navigate('/home');
         }
       } else {
-        alert(data.message || data.error || 'Google login failed');
+        setError(data.error || 'Login failed');
       }
     } catch (err) {
-      console.error('Google login error:', err);
-      alert('Failed to sign in with Google. Please try again.');
+      console.error('Login error:', err);
+      setError('An error occurred. Please try again.');
     } finally {
-      setIsGoogleLoading(false);
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleSuccess = (data) => {
+    if (data.needsProfile) {
+      navigate('/complete-profile', { state: { signupMethod: 'google' } });
+    } else {
+      navigate('/home');
     }
   };
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left Panel - Decorative */}
-      <div className="hidden lg:flex lg:w-1/4 bg-gradient-to-br from-indigo-600 via-purple-600 to-purple-800 relative overflow-hidden">
-        {/* Animated background shapes */}
-        <div className="absolute inset-0">
-          <div className="absolute top-20 left-20 w-72 h-72 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
-          <div className="absolute bottom-20 right-20 w-96 h-96 bg-purple-400/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
-          <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-indigo-400/15 rounded-full blur-2xl animate-pulse delay-500"></div>
-        </div>
-        
-        {/* Content */}
-        <div className="relative z-10 flex flex-col justify-center px-16 text-white">
-          <div className="mb-8">
-            <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mb-6">
-              <HiLightningBolt className="w-8 h-8 text-white" />
-            </div>
-            <h2 className="text-4xl font-bold mb-4">Welcome back!</h2>
-            <p className="text-lg text-white/80 leading-relaxed">
-              Placeholder
-            </p>
+    <div className="min-h-screen flex flex-col bg-white relative overflow-hidden">
+      {/* Purple gradient decorations */}
+      <div className="absolute top-1/4 right-1/3 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-15 animate-blob"></div>
+      <div className="absolute bottom-1/4 left-1/3 w-80 h-80 bg-violet-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
+      
+      {/* Logo/Brand in top-left */}
+      <div className="absolute top-6 left-6 z-999">
+        <Link to="/" className="flex items-center gap-2 group">
+          <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/20 group-hover:shadow-purple-500/40 transition-all duration-300">
+            <span className="text-white font-bold text-lg">T</span>
           </div>
+
           
-          {/* Feature highlights */}
-          <div className="space-y-4 mt-8">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                <FiCheckCircle className="w-5 h-5" />
-              </div>
-              <span className="text-white/90">Placeholder</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                <FiTrendingUp className="w-5 h-5" />
-              </div>
-              <span className="text-white/90">Placeholder</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                <FiUsers className="w-5 h-5" />
-              </div>
-              <span className="text-white/90">Placeholder</span>
-            </div>
-          </div>
-        </div>
+          <span className="text-xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent group-hover:from-violet-500 group-hover:to-purple-500 transition-all duration-300">
+            Threadwork
+          </span>
+        </Link>
       </div>
-
-      {/* Right Panel - Google Login */}
-      <div className="flex-1 flex items-center justify-start lg:pl-80 p-8 pt-24 bg-gray-50">
+      
+      {/* Centered form panel */}
+      <div className="flex-1 flex items-center justify-center p-8 relative z-10">
         <div className="w-full max-w-md">
-          {/* Mobile logo */}
-          <div className="lg:hidden text-center mb-8">
-            <div className="w-14 h-14 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <HiLightningBolt className="w-7 h-7 text-white" />
-            </div>
-          </div>
-
           <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 p-10">
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                Threadwork
+                Sign In
               </h1>
-              <p className="text-gray-500">Sign in with your Google account</p>
+              <p className="text-gray-500">Welcome back to Threadwork</p>
             </div>
 
-            {/* Google Login Button */}
-            <div 
-              ref={googleButtonRef}
-              className="w-full mb-6 flex items-center justify-center"
-              style={{ minHeight: '44px' }}
-            >
-              {isGoogleLoading && (
-                <div className="flex items-center gap-2 text-gray-600">
-                  <AiOutlineLoading3Quarters className="w-5 h-5 animate-spin" />
-                  Signing in...
-                </div>
-              )}
-            </div>
+            {/* Google OAuth - Top */}
+            <GoogleOAuth onSuccess={handleGoogleSuccess} isSignup={false} />
 
-            {/* Divider */}
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-200"></div>
+            {/* Error Message */}
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-600 text-sm">{error}</p>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white text-gray-500">Or</span>
-              </div>
-            </div>
+            )}
 
-            {/* Email Login Link */}
-            <Link
-              to="/email-login"
-              className="w-full py-3.5 bg-white border-2 border-gray-200 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 flex items-center justify-center gap-3"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              Sign in with Email
-            </Link>
+            {/* Email and Password Form */}
+            <form onSubmit={handleEmailLogin} className="space-y-5">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                  Email address
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 transition-all duration-200 outline-none"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  required
+                  className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 transition-all duration-200 outline-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl font-semibold hover:from-violet-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
+              >
+                {isLoading ? (
+                  <>
+                    <AiOutlineLoading3Quarters className="w-5 h-5 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  'Sign In'
+                )}
+              </button>
+            </form>
 
             <div className="mt-8 pt-6 border-t border-gray-100 text-center">
               <p className="text-gray-500">

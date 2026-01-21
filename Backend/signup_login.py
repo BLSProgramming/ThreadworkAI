@@ -16,28 +16,16 @@ def check_password(password, hashed_password):
  
 @signup_routes.route('/api/signup', methods=['POST'])
 def signup():
-    special_characters = ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '-', '[', ']', '{', '}', '"', ':', ';', "'",
-                          '/', '?', '>', '<', '|', '=', '+']
     data = request.get_json()
-    full_name = data.get('full_name')
     email = data.get('email')
     password = data.get('password')
-    birth_date = data.get('birth_date')
+    country = data.get('country')
  
     # Checks if fields are empty
-    if not full_name or not password:
-        return jsonify({"error": "Full name and password required"}), 400
+    if not email or not password:
+        return jsonify({"error": "Email and password required"}), 400
  
-    # Checks username validity
-    if len(full_name) >= 20:
-        return jsonify({"error": "invalid username"}), 400
- 
-    # Checks if there are any special characters
-    for letter in full_name:
-        if letter in special_characters:
-            return jsonify({"error": "invalid username"}), 400
- 
-    # Hashed username and password
+    # Hashed password
     hashed_password = password_hash(password)
  
     connection = get_db_connection()
@@ -56,28 +44,26 @@ def signup():
     if existing_user:
         cursor.close()
         connection.close()
-        return jsonify({"error": "Username already taken"}), 409
+        return jsonify({"error": "Email already registered"}), 409
  
     # Hash password and insert if email is free
     cursor.execute("""
-    INSERT INTO users (full_name, email, password, birth_date)
-    VALUES (%(full_name)s, %(email)s, %(password)s, %(birth_date)s)
+    INSERT INTO users (email, password, country)
+    VALUES (%(email)s, %(password)s, %(country)s)
     RETURNING id
     """, {
-        'full_name': full_name,
         'email': email,
         'password': hashed_password,
-        'birth_date': birth_date
+        'country': country
     })
  
     user_id = cursor.fetchone()[0]
-    session['user_id'] = user_id
  
     connection.commit()
     cursor.close()
     connection.close()
  
-    return jsonify({"message": f"User {full_name} created successfully!"}), 200
+    return jsonify({"message": "User created successfully!"}), 200
  
  
 @signup_routes.route('/api/login', methods=["POST"])
@@ -129,3 +115,89 @@ def login():
     except Exception as e:
         print("Error ", e)
         return jsonify({"error": str(e)})
+
+
+@signup_routes.route('/api/check-auth', methods=['GET'])
+def check_auth():
+    """Check if user is authenticated via session"""
+    user_id = session.get('user_id')
+    
+    if user_id:
+        return jsonify({"authenticated": True, "user_id": user_id}), 200
+    else:
+        return jsonify({"authenticated": False}), 401
+
+
+@signup_routes.route('/api/check-profile', methods=['GET'])
+def check_profile():
+    """Check if user's profile is complete"""
+    user_id = session.get('user_id')
+    
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        
+        cursor.execute("""
+            SELECT full_name, birth_date
+            FROM users
+            WHERE id = %(user_id)s
+        """, {
+            'user_id': user_id
+        })
+        row = cursor.fetchone()
+        
+        cursor.close()
+        connection.close()
+        
+        if row and row[0] and row[1]:
+            # Both full_name and birth_date exist
+            return jsonify({"profileComplete": True}), 200
+        else:
+            return jsonify({"profileComplete": False}), 200
+            
+    except Exception as e:
+        print("Check profile error:", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@signup_routes.route('/api/complete-profile', methods=['POST'])
+def complete_profile():
+    """Complete profile for existing authenticated users"""
+    user_id = session.get('user_id')
+    
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    data = request.get_json()
+    full_name = data.get('full_name')
+    birth_date = data.get('birth_date')
+    
+    if not full_name or not birth_date:
+        return jsonify({"error": "Full name and birth date required"}), 400
+    
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        
+        cursor.execute("""
+            UPDATE users
+            SET full_name = %(full_name)s, birth_date = %(birth_date)s
+            WHERE id = %(user_id)s
+        """, {
+            'full_name': full_name,
+            'birth_date': birth_date,
+            'user_id': user_id
+        })
+        
+        connection.commit()
+        cursor.close()
+        connection.close()
+        
+        return jsonify({"message": "Profile completed successfully"}), 200
+        
+    except Exception as e:
+        print("Complete profile error:", e)
+        return jsonify({"error": str(e)}), 500

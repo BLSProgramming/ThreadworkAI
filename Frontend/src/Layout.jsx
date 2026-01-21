@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Outlet } from 'react-router-dom';
 import UserNavbar from './Components/Navbars/UserNavbar';
 
 function Layout({ children }) {
@@ -15,7 +16,7 @@ function Layout({ children }) {
       
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {children}
+        {children ? children : <Outlet />}
       </div>
     </div>
   );

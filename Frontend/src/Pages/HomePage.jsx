@@ -1,10 +1,12 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Prism from 'prismjs';
 import 'prismjs/components/prism-python';
 import 'prismjs/themes/prism-tomorrow.css';
 import { HiLightningBolt } from '../assets/Icons';
 import Collapsible from '../Components/Collapsible';
+import { streamChat } from '../utils/streamChat';
+import ModelSelector from '../Components/ModelSelector';
 
 function HomePage() {
   const navigate = useNavigate();
@@ -16,30 +18,47 @@ function HomePage() {
     llama: true,
     glm: true,
     qwen: true,
+    essential: false,
+    moonshot: false,
   });
-  const [modelSearch, setModelSearch] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const pendingChatRef = useRef(null);
   const isLoadingChatRef = useRef(false);
+  const currentAbortRef = useRef(null);
 
-  const modelOptions = [
-    { key: 'deepseek', label: 'DeepSeek' },
-    { key: 'llama', label: 'Llama' },
-    { key: 'glm', label: 'GLM-4.6' },
-    { key: 'qwen', label: 'Qwen' },
-  ];
+  const modelOptions = useMemo(() => [
+    { key: 'deepseek', label: 'DeepSeek', tags: ['Reasoning', 'Coding', 'Math', 'Long Context'] },
+    { key: 'llama', label: 'Llama', tags: ['Fast', 'General', 'Lightweight'] },
+    { key: 'glm', label: 'GLM-4.6', tags: ['Multilingual', 'Reasoning', 'Coding'] },
+    { key: 'qwen', label: 'Qwen', tags: ['Coding', 'Reasoning', 'Tools'] },
+    { key: 'essential', label: 'Essential', tags: ['Creative', 'Writing', 'General'] },
+    { key: 'moonshot', label: 'Moonshot', tags: ['Long Reasoning', 'Planning', 'Multilingual'] },
+  ], []);
+
+  const lastBotId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].sender === 'bot') return messages[i].id;
+    }
+    return null;
+  }, [messages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Inline CodeBlock component for copy UX per block
+  // Inline CodeBlock component for copy UX per block with syntax highlighting
   const CodeBlock = ({ code, lang = 'text' }) => {
     const [copied, setCopied] = useState(false);
     const timeoutRef = useRef(null);
+    const codeRef = useRef(null);
 
-    useEffect(() => () => clearTimeout(timeoutRef.current), []);
+    useEffect(() => {
+      if (codeRef.current) {
+        Prism.highlightElement(codeRef.current);
+      }
+      return () => clearTimeout(timeoutRef.current);
+    }, [code, lang]);
 
     const handleCopy = async () => {
       try {
@@ -52,31 +71,323 @@ function HomePage() {
       }
     };
 
+    const langDisplay = lang ? lang.toUpperCase() : 'TEXT';
+
     return (
-      <pre className="relative bg-gray-900 text-gray-100 text-sm rounded-lg p-4 overflow-x-auto border border-gray-800 my-2">
-        <div className="text-xs text-gray-400 mb-2 flex items-center gap-2">
-          <span className="px-2 py-0.5 bg-gray-800 rounded uppercase tracking-wide">{lang}</span>
-          <span>Code</span>
+      <div className="relative my-3 rounded-lg overflow-hidden border border-gray-800 shadow-md bg-gray-900">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-gray-950 border-b border-gray-800">
+          <span className="text-xs font-semibold text-gray-400 tracking-wide uppercase">{langDisplay}</span>
           <button
             type="button"
             onClick={handleCopy}
-            className={`ml-auto px-3 py-1 text-[11px] font-semibold rounded border transition transform active:scale-95 ${
+            className={`px-3 py-1.5 text-[11px] font-semibold rounded border transition-all transform active:scale-95 ${
               copied
-                ? 'bg-emerald-600 text-white border-emerald-700'
-                : 'bg-gray-800 text-gray-200 border-gray-700 hover:bg-gray-700'
+                ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm'
+                : 'bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700 hover:text-gray-100'
             }`}
           >
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? '✓ Copied' : 'Copy'}
           </button>
         </div>
-        <code className={`block whitespace-pre language-${lang.toLowerCase()}`}>{code.trimEnd()}</code>
-      </pre>
+        <pre className="p-4 overflow-x-auto text-sm bg-gray-900">
+          <code ref={codeRef} className={`language-${lang.toLowerCase()} text-gray-100`}>
+            {code.trimEnd()}
+          </code>
+        </pre>
+      </div>
     );
   };
 
-  // Render text with headings, lists, inline bold, links, YouTube embeds, and fenced code blocks
+  // Parse synthesis output using === delimiters
+  const parseSynthesisNew = (text) => {
+    if (!text) {
+      return null;
+    }
+    
+    // Check for new format with === markers
+    const hasNewFormat = text.includes('===REASONING===') || text.includes('===ANSWER===');
+    
+    if (hasNewFormat) {
+      const reasoningMatch = text.match(/===REASONING===\s*([\s\S]*?)(?====ANSWER===|$)/i);
+      const answerMatch = text.match(/===ANSWER===\s*([\s\S]*?)(?====TIPS===|$)/i);
+      const tipsMatch = text.match(/===TIPS===\s*([\s\S]*?)$/i);
+      
+      return {
+        reasoning: reasoningMatch ? reasoningMatch[1].trim() : '',
+        answer: answerMatch ? answerMatch[1].trim() : '',
+        tips: tipsMatch ? tipsMatch[1].trim() : '',
+        format: 'new',
+      };
+    }
+    
+    return null;
+  };
+
+  // Parse reasoning into subsections for separate collapsible boxes
+  const parseReasoningSections = (text) => {
+    if (!text) {
+      return null;
+    }
+    
+    // Split by bold headers - be flexible with format variations
+    const consensusMatch = text.match(/\*\*Consensus\*\*[^•\n]*\n?([\s\S]*?)(?=\*\*Conflicts?\*\*|\*\*Checks?\*\*|$)/i);
+    const conflictsMatch = text.match(/\*\*Conflicts?\*\*[^•\n]*\n?([\s\S]*?)(?=\*\*Checks?\*\*|$)/i);
+    const checksMatch = text.match(/\*\*Checks?\*\*[^•\n]*\n?([\s\S]*?)$/i);
+    
+    const consensus = consensusMatch ? consensusMatch[1].trim() : '';
+    const conflicts = conflictsMatch ? conflictsMatch[1].trim() : '';
+    const checks = checksMatch ? checksMatch[1].trim() : '';
+    
+    // Only return if we found at least one section
+    if (!consensus && !conflicts && !checks) {
+      return null;
+    }
+    
+    return { consensus, conflicts, checks };
+  };
+
+  // Simple rendering for synthesis sections
+  const renderSynthesis = (text) => {
+    const sections = parseSynthesisNew(text);
+    
+    if (!sections) {
+      // Not synthesis format - render as plain content
+      return renderFormattedContent(text);
+    }
+    
+    
+    // Parse reasoning into subsections
+    const reasoningSubs = parseReasoningSections(sections.reasoning);
+
+    return (
+      <div className="space-y-4">
+        {/* Main Answer - Collapsible, open by default */}
+        {sections.answer && (
+          <div className="bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-300 rounded-xl shadow-md overflow-hidden">
+            <Collapsible
+              defaultOpen={true}
+              titleClassName="px-5 py-3 bg-gradient-to-r from-emerald-600 to-green-600 text-white font-bold text-lg"
+              title={
+                <span className="flex items-center gap-2">
+                  ✓ Answer
+                </span>
+              }
+              showCollapseButton={true}
+              collapseButtonClassName="mt-2 bg-emerald-500 text-white hover:bg-emerald-400 rounded-lg"
+            >
+              <div className="px-5 py-4 pb-12 space-y-4 text-gray-800">
+                {renderFormattedContent(sections.answer, {
+                  headingClass: 'text-emerald-700',
+                  bulletColor: 'text-emerald-600',
+                })}
+              </div>
+            </Collapsible>
+          </div>
+        )}
+        
+        {/* Tips - Collapsible, open by default */}
+        {sections.tips && (
+          <div className="bg-amber-50 border border-amber-300 rounded-lg shadow-sm overflow-hidden">
+            <Collapsible
+              defaultOpen={true}
+              titleClassName="px-4 py-2 bg-amber-100 text-amber-700 font-bold text-sm"
+              title={
+                <span className="flex items-center gap-2">
+                  💡 Tips
+                </span>
+              }
+              showCollapseButton={true}
+              collapseButtonClassName="mt-2 bg-amber-200 text-amber-700 hover:bg-amber-300 rounded-lg"
+            >
+              <div className="px-4 py-3 pr-14 space-y-2 text-gray-700 text-sm">
+                {renderFormattedContent(sections.tips, {
+                  headingClass: 'text-amber-700',
+                  bulletColor: 'text-amber-600',
+                })}
+              </div>
+            </Collapsible>
+          </div>
+        )}
+        
+        {/* Reasoning - Split into 2 collapsible boxes */}
+        {reasoningSubs && (reasoningSubs.consensus || reasoningSubs.conflicts) && (
+          <div className="bg-purple-50 border border-purple-200 rounded-lg shadow-sm overflow-hidden">
+            <Collapsible
+              defaultOpen={!reasoningSubs.conflicts}
+              titleClassName="px-4 py-3 text-xs font-bold text-purple-700 uppercase tracking-wider"
+              title={
+                <span className="flex items-center gap-2">
+                  🤝 Model Agreement
+                </span>
+              }
+              showCollapseButton={true}
+              collapseButtonClassName="mt-2 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg"
+            >
+              <div className="px-4 pb-4 pt-2 space-y-3 text-gray-700 text-sm">
+                {reasoningSubs.consensus && (
+                  <div>
+                    <h4 className="font-bold text-purple-700 text-sm mb-2 flex items-center gap-1">
+                      ✓ Consensus
+                    </h4>
+                    <p className="text-xs text-purple-600 mb-2 italic">All models agreed on these points:</p>
+                    {renderFormattedContent(reasoningSubs.consensus, {
+                      headingClass: 'text-purple-700',
+                      bulletColor: 'text-purple-600',
+                    })}
+                  </div>
+                )}
+                {reasoningSubs.conflicts && (
+                  <div className="mt-3 pt-3 border-t border-purple-200 bg-orange-50 -mx-4 -mb-4 px-4 py-3 rounded-b-lg">
+                    <h4 className="font-bold text-orange-700 text-sm mb-2 flex items-center gap-1">
+                      ⚡ Where Models Disagreed
+                    </h4>
+                    <p className="text-xs text-orange-600 mb-2 italic">Models had different opinions on these items. The choice below explains the reasoning:</p>
+                    {renderFormattedContent(reasoningSubs.conflicts, {
+                      headingClass: 'text-orange-700',
+                      bulletColor: 'text-orange-600',
+                    })}
+                  </div>
+                )}
+              </div>
+            </Collapsible>
+          </div>
+        )}
+        
+        {reasoningSubs && reasoningSubs.checks && (
+          <div className="bg-blue-50 border-2 border-blue-300 rounded-lg shadow-sm overflow-hidden">
+            <Collapsible
+              defaultOpen={true}
+              titleClassName="px-4 py-3 text-xs font-bold text-blue-700 uppercase tracking-wider"
+              title={
+                <span className="flex items-center gap-2">
+                  🔍 How to Verify This Answer
+                </span>
+              }
+              showCollapseButton={true}
+              collapseButtonClassName="mt-2 bg-blue-200 text-blue-700 hover:bg-blue-300 rounded-lg"
+            >
+              <div className="px-4 pb-4 pt-2 space-y-3 text-gray-700 text-sm bg-white">
+                <p className="text-xs text-blue-600 italic mb-2">Use these checks to confirm the answer is correct before you start:</p>
+                {renderFormattedContent(reasoningSubs.checks, {
+                  headingClass: 'text-blue-700',
+                  bulletColor: 'text-blue-600',
+                })}
+              </div>
+            </Collapsible>
+          </div>
+        )}
+        
+        {/* Fallback if reasoning wasn't parsed into subsections */}
+        {sections.reasoning && !reasoningSubs && (
+          <div className="bg-purple-50 border border-purple-200 rounded-lg shadow-sm overflow-hidden">
+            <Collapsible
+              defaultOpen={false}
+              titleClassName="px-4 py-3 text-xs font-bold text-purple-700 uppercase tracking-wider"
+              title={
+                <span className="flex items-center gap-2">
+                  🧠 How we got this answer
+                </span>
+              }
+              showCollapseButton={true}
+              collapseButtonClassName="mt-2 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg"
+            >
+              <div className="px-4 pb-4 pt-2 space-y-3 text-gray-700 text-sm">
+                {renderFormattedContent(sections.reasoning, {
+                  headingClass: 'text-purple-700',
+                  bulletColor: 'text-purple-600',
+                })}
+              </div>
+            </Collapsible>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Parse markdown tables into structured data
+  const parseMarkdownTable = (tableStr) => {
+    const lines = tableStr.trim().split('\n').map(l => l.trim());
+    if (lines.length < 3) return null;
+    
+    // Extract header
+    const headerLine = lines[0];
+    const separator = lines[1];
+    const dataLines = lines.slice(2);
+    
+    // Check if valid table (separator should contain dashes and pipes)
+    if (!separator.includes('-') || !separator.includes('|')) return null;
+    
+    const headers = headerLine.split('|').map(h => h.trim()).filter(h => h);
+    const rows = dataLines.map(line => 
+      line.split('|').map(cell => cell.trim()).filter(cell => cell)
+    ).filter(row => row.length === headers.length);
+    
+    return { headers, rows };
+  };
+
+  // Render markdown table as HTML
+  const renderTable = (tableStr) => {
+    const table = parseMarkdownTable(tableStr);
+    if (!table) return <p className="text-sm text-gray-600">{tableStr}</p>;
+    
+    return (
+      <div className="overflow-x-auto my-4 rounded-lg border border-gray-300">
+        <table className="w-full text-sm border-collapse bg-white">
+          <thead className="bg-gray-100 border-b-2 border-gray-300">
+            <tr>
+              {table.headers.map((h, i) => (
+                <th key={i} className="px-3 py-2 text-left font-semibold text-gray-700 border-r last:border-r-0">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {table.rows.map((row, ri) => (
+              <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-gray-50 border-b border-gray-200'}>
+                {row.map((cell, ci) => (
+                  <td key={ci} className="px-3 py-2 text-gray-700 border-r last:border-r-0 border-gray-200">
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  // Render text with headings, lists, inline bold, links, YouTube embeds, tables, and fenced code blocks
   const renderFormattedContent = (text, { headingClass = 'text-indigo-700', bulletColor = 'text-indigo-600' } = {}) => {
     if (!text) return null;
+
+    // Split text by tables first (markdown table pattern)
+    const tablePattern = /(\n\|[^\n]+\|[^\n]*(?:\n\|[-\s|:]+\|[^\n]*)+(?:\n\|[^\n]+\|[^\n]*)*)/g;
+    const parts = text.split(tablePattern);
+    
+    return (
+      <div>
+        {parts.map((part, partIdx) => {
+          // Check if this part is a table
+          if (tablePattern.test(part)) {
+            return <div key={partIdx}>{renderTable(part)}</div>;
+          }
+          
+          // Otherwise, process as regular formatted content
+          return (
+            <div key={partIdx}>
+              {renderRegularContent(part, { headingClass, bulletColor })}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Render regular (non-table) formatted content
+  const renderRegularContent = (text, { headingClass = 'text-indigo-700', bulletColor = 'text-indigo-600' } = {}) => {
+    if (!text || text.trim().length === 0) return null;
 
     const extractYouTubeId = (url) => {
       const patterns = [
@@ -175,6 +486,33 @@ function HomePage() {
         const trimmed = line.trim();
         if (!trimmed) return <div key={key} className="h-2" />;
 
+        // Horizontal rule
+        if (/^-{3,}$/.test(trimmed)) {
+          return <hr key={key} className="my-4 border-t-2 border-gray-300" />;
+        }
+
+        // Bold section header: **Header:** or **Header**
+        const boldHeaderMatch = trimmed.match(/^\*\*([^*:]+):?\*\*:?\s*(.*)$/);
+        if (boldHeaderMatch) {
+          const headerText = boldHeaderMatch[1].trim();
+          const restText = boldHeaderMatch[2].trim();
+          
+          // Special icons for known headers
+          let icon = '';
+          if (/consensus/i.test(headerText)) icon = '✓ ';
+          else if (/conflict/i.test(headerText)) icon = '⚡ ';
+          else if (/check/i.test(headerText)) icon = '🔍 ';
+          
+          return (
+            <div key={key} className="mt-3 mb-1">
+              <h4 className={`font-bold ${headingClass} text-sm inline`}>
+                {icon}{headerText}
+              </h4>
+              {restText && <span className="text-sm text-gray-800 ml-1">{restText}</span>}
+            </div>
+          );
+        }
+
         const subheaderMatch = trimmed.match(/^\*([^*]+)\*$/);
         if (subheaderMatch) {
           return (
@@ -186,6 +524,18 @@ function HomePage() {
 
         if (/^#{1,3}\s/.test(trimmed) || /^[A-Z][A-Za-z\s\-‑]+:$/.test(trimmed) || /^[A-Z][A-Za-z\s\-‑]+\s*\([^)]+\)$/.test(trimmed)) {
           const headerText = trimmed.replace(/^#+\s*/, '').replace(/:$/, '');
+          
+          // Special styling for Equipment and Tips sections
+          if (/^(Equipment|Tips|Notes\s*&\s*Tips)$/i.test(headerText)) {
+            return (
+              <div key={key} className="mt-4 mb-2 px-3 py-2 bg-blue-50 border-l-4 border-blue-400 rounded">
+                <h3 className={`font-bold text-blue-700 text-sm uppercase tracking-wide`}>
+                  {headerText === 'Equipment' ? '🔧 ' : '💡 '}{headerText}
+                </h3>
+              </div>
+            );
+          }
+          
           return (
             <h3 key={key} className={`font-bold ${headingClass} text-sm mt-4 mb-2 uppercase tracking-wide`}>
               {headerText}
@@ -239,7 +589,7 @@ function HomePage() {
         }
 
         return (
-          <p key={key} className="text-sm leading-relaxed text-gray-800">
+          <p key={key} className="text-sm leading-relaxed text-gray-800 mb-2">
             {renderTextWithLinks(trimmed)}
           </p>
         );
@@ -322,11 +672,27 @@ function HomePage() {
     });
   };
 
+  const persistTimerRef = useRef(null);
+  const pendingPersistRef = useRef(null);
+
+  // Batch localStorage writes to reduce churn during streaming updates
   const persistChats = (updater) => {
     const chats = JSON.parse(localStorage.getItem('chats') || '[]');
     const updated = updater(chats);
-    localStorage.setItem('chats', JSON.stringify(updated));
-    window.dispatchEvent(new Event('chats-updated'));
+    pendingPersistRef.current = updated;
+
+    if (!persistTimerRef.current) {
+      persistTimerRef.current = setTimeout(() => {
+        const payload = pendingPersistRef.current;
+        if (payload) {
+          localStorage.setItem('chats', JSON.stringify(payload));
+          setTimeout(() => window.dispatchEvent(new Event('chats-updated')), 0);
+        }
+        pendingPersistRef.current = null;
+        persistTimerRef.current = null;
+      }, 60);
+    }
+
     return updated;
   };
 
@@ -415,7 +781,8 @@ function HomePage() {
       } else {
         setMessages([]);
       }
-      pendingChatRef.current = null;
+      // Don't clear pendingChatRef here - let the abort useEffect handle it
+      // pendingChatRef.current = null;
     } else {
       setMessages([]);
     }
@@ -424,13 +791,57 @@ function HomePage() {
     }, 100);
   }, [chatId]);
 
+  // Auto-scroll and syntax highlighting on message updates
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    // Cleanup on unmount: abort any in-flight stream
+    return () => {
+      if (currentAbortRef.current) {
+        try {
+          currentAbortRef.current.abort();
+        } catch {}
+        currentAbortRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
-    Prism.highlightAll();
-  }, [messages]);
+    console.log('[UI] chatId useEffect fired', { 
+      chatId, 
+      isLoading, 
+      hasAbortController: !!currentAbortRef.current,
+      pendingChatId: pendingChatRef.current?.id,
+      doIdsMatch: pendingChatRef.current?.id === chatId,
+      shouldAbort: isLoading && currentAbortRef.current && !(pendingChatRef.current && pendingChatRef.current.id === chatId)
+    });
+    
+    if (isLoading && currentAbortRef.current) {
+      if (pendingChatRef.current && pendingChatRef.current.id === chatId) {
+        console.log('[UI] This is a new chat we just created, NOT aborting. Clearing pendingChatRef.');
+        pendingChatRef.current = null; 
+        return; 
+      }
+      
+      console.log('[UI] Aborting stream due to chatId change', {
+        reason: 'chatId changed but not matching pending',
+        pendingId: pendingChatRef.current?.id,
+        newChatId: chatId,
+        comparison: `"${pendingChatRef.current?.id}" === "${chatId}" = ${pendingChatRef.current?.id === chatId}`
+      });
+      try {
+        currentAbortRef.current.abort();
+        currentAbortRef.current = null;
+        setIsLoading(false);
+        // Remove incomplete bot message
+        setMessages((currentMessages) => {
+          const lastMsg = currentMessages[currentMessages.length - 1];
+          if (lastMsg && lastMsg.sender === 'bot' && !lastMsg.text) {
+            return currentMessages.slice(0, -1);
+          }
+          return currentMessages;
+        });
+      } catch {}
+    }
+  }, [chatId]);
 
   useEffect(() => {
     if (chatId && messages.length > 0 && !isLoadingChatRef.current) {
@@ -448,23 +859,51 @@ function HomePage() {
   }, [messages, chatId]);
 
   const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!input.trim()) return;
+    if (e && e.preventDefault) {
+      e.preventDefault();
+    }
+    if (e && e.stopPropagation) {
+      e.stopPropagation();
+    }
+    
+    console.log('[UI] handleSendMessage called', { 
+      hasInput: !!input?.trim(), 
+      inputValue: input,
+      isLoading, 
+      chatId,
+      modelsState: selectedModels 
+    });
+    
+    if (!input || !input.trim()) {
+      console.log('[UI] Empty input, returning');
+      return;
+    }
 
     const activeModels = modelOptions
       .filter((opt) => selectedModels[opt.key])
       .map((opt) => opt.key);
 
-    if (!activeModels.length) return;
+    console.log('[UI] Active models:', activeModels, 'from selectedModels:', selectedModels);
+
+    if (!activeModels.length) {
+      console.warn('[UI] No models selected!');
+      return;
+    }
 
     const userMessage = { id: Date.now(), text: input, sender: 'user' };
     const nextMessages = [...messages, userMessage];
     const savedInput = input;
 
     let currentChatId = chatId;
+    let isNewChat = false;
     if (!chatId) {
       const newChatId = `chat-${Date.now()}`;
       currentChatId = newChatId;
+      isNewChat = true;
+      
+      console.log('[UI] Creating new chat', { newChatId });
+      
+      // Set pending chat ref FIRST before navigation
       pendingChatRef.current = { id: newChatId, userMessage: nextMessages };
 
       const chats = JSON.parse(localStorage.getItem('chats') || '[]');
@@ -479,7 +918,6 @@ function HomePage() {
       setTimeout(() => {
         window.dispatchEvent(new Event('chats-updated'));
       }, 0);
-      navigate(`/chat/${newChatId}`);
     } else {
       setMessages(nextMessages);
       persistChats((chats) => {
@@ -497,72 +935,155 @@ function HomePage() {
 
     setInput('');
     setIsLoading(true);
+ 
+    if (currentAbortRef.current) {
+      try { currentAbortRef.current.abort(); } catch {}
+    }
+    const abortController = new AbortController();
+    currentAbortRef.current = abortController;
+
+    const startTs = performance.now();
+    let firstModelMs = null;
+    let synthesisMs = null;
+
+    // Collect all responses as they stream in
+    const allResponses = {};
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: savedInput, models: activeModels }),
-      });
+      await streamChat(
+        savedInput,
+        activeModels,
+ 
+        (modelData) => {
+          const { model, response } = modelData;
+          allResponses[model.toLowerCase()] = response;
 
-      if (response.ok) {
-        const data = await response.json();
-        let botMessages = [];
-        if (data.responses && Array.isArray(data.responses)) {
-          const modelResponses = {};
-          data.responses.forEach((resp) => {
-            modelResponses[resp.model] = resp.response;
-          });
+          if (firstModelMs === null) {
+            firstModelMs = performance.now() - startTs;
+          }
 
-          // Build allResponses object from available model responses (excluding GPT-OSS)
-          const allResponses = {};
-          data.responses.forEach((resp) => {
-            if (resp.model !== 'GPT-OSS') {
-              allResponses[resp.model.toLowerCase()] = resp.response;
+
+          setMessages((currentMessages) => {
+            const existingBotMessage = currentMessages.find(
+              (m) => m.sender === 'bot' && m.id === userMessage.id + 1
+            );
+
+            if (existingBotMessage) {
+              return currentMessages.map((m) =>
+                m.id === existingBotMessage.id
+                  ? {
+                      ...m,
+                      allResponses: { ...m.allResponses, ...allResponses },
+                    }
+                  : m
+              );
+            } else {
+
+              const newBotMessage = {
+                id: userMessage.id + 1,
+                text: null,
+                sender: 'bot',
+                model: 'Threadwork AI',
+                allResponses: allResponses,
+              };
+              return [...currentMessages, newBotMessage];
             }
           });
+        },
+  
+        (synthesisData) => {
+          const { response } = synthesisData;
+          synthesisMs = performance.now() - startTs;
 
-          botMessages = [
-            {
-              id: Date.now() + Math.random(),
-              text: modelResponses['GPT-OSS'] || 'No response',
+          setMessages((currentMessages) => {
+            const existingBot = currentMessages.find(
+              (m) => m.sender === 'bot' && m.id === userMessage.id + 1
+            );
+
+            if (existingBot) {
+              return currentMessages.map((m) =>
+                m.sender === 'bot' && m.id === userMessage.id + 1
+                  ? {
+                      ...m,
+                      text: response,
+                      allResponses: allResponses,
+                    }
+                  : m
+              );
+            }
+
+            // If no bot message exists yet (edge case), create it now
+            const newBotMessage = {
+              id: userMessage.id + 1,
+              text: response,
               sender: 'bot',
               model: 'Threadwork AI',
               allResponses: allResponses,
-            },
-          ];
-        } else {
-          botMessages = [{ id: Date.now() + 1, text: 'No response received', sender: 'bot' }];
-        }
+            };
+            return [...currentMessages, newBotMessage];
+          });
+        },
+        // onDone - stream complete
+        () => {
+          setIsLoading(false);
+          setMessages((currentMessages) => {
+            const merged = currentMessages.map((m) => {
+              if (m.sender === 'bot' && m.id === userMessage.id + 1) {
+                return {
+                  ...m,
+                  timings: {
+                    firstModelMs: firstModelMs,
+                    synthesisMs: synthesisMs,
+                    totalMs: performance.now() - startTs,
+                  },
+                };
+              }
+              return m;
+            });
 
-        setMessages((currentMessages) => {
-          const merged = [...currentMessages, ...botMessages];
-          persistChats((chats) => {
-            const chatIndex = chats.findIndex((chat) => chat.id === currentChatId);
-            if (chatIndex !== -1) {
-              chats[chatIndex].messages = merged;
-            }
-            return chats;
+            persistChats((chats) => {
+              const chatIndex = chats.findIndex((chat) => chat.id === currentChatId);
+              if (chatIndex !== -1) {
+                chats[chatIndex].messages = merged;
+              }
+              return chats;
+            });
+
+            saveChatToDatabase(currentChatId);
+            return merged;
           });
-          saveChatToDatabase(currentChatId);
-          return merged;
-        });
-      } else {
-        const botMessage = { id: Date.now() + 1, text: 'Error: Could not get response', sender: 'bot' };
-        setMessages((currentMessages) => {
-          const merged = [...currentMessages, botMessage];
-          persistChats((chats) => {
-            const chatIndex = chats.findIndex((chat) => chat.id === currentChatId);
-            if (chatIndex !== -1) {
-              chats[chatIndex].messages = merged;
-            }
-            return chats;
+        },
+        // onError - handle error
+        (error) => {
+          console.log('[UI] error', error);
+          if (error?.name === 'AbortError') {
+            setIsLoading(false);
+            return;
+          }
+          console.error('Stream error:', error);
+          setIsLoading(false);
+          const botMessage = { id: Date.now() + 1, text: 'Error: Could not get response', sender: 'bot' };
+          setMessages((currentMessages) => {
+            const merged = [...currentMessages, botMessage];
+            persistChats((chats) => {
+              const chatIndex = chats.findIndex((chat) => chat.id === currentChatId);
+              if (chatIndex !== -1) {
+                chats[chatIndex].messages = merged;
+              }
+              return chats;
+            });
+            saveChatToDatabase(currentChatId);
+            return merged;
           });
-          saveChatToDatabase(currentChatId);
-          return merged;
-        });
-      }
+        }
+      , abortController.signal);
     } catch (err) {
+      if (err?.name === 'AbortError') {
+        setIsLoading(false);
+        return;
+      }
+      console.error('Chat error:', err);
+      setIsLoading(false);
       const botMessage = { id: Date.now() + 1, text: 'Network error. Please try again.', sender: 'bot' };
       setMessages((currentMessages) => {
         const merged = [...currentMessages, botMessage];
@@ -581,79 +1102,42 @@ function HomePage() {
     }
   };
 
-  const lastBotId = [...messages].reverse().find((m) => m.sender === 'bot')?.id;
-  const filteredModels = modelOptions.filter((opt) =>
-    opt.label.toLowerCase().includes(modelSearch.toLowerCase())
-  );
+  const handleCancelStream = () => {
+    try {
+      if (currentAbortRef.current) {
+        currentAbortRef.current.abort();
+        currentAbortRef.current = null;
+        setIsLoading(false);
+        setMessages((currentMessages) => {
+          const lastMsg = currentMessages[currentMessages.length - 1];
+          if (lastMsg && lastMsg.sender === 'bot' && !lastMsg.text) {
+            // Remove incomplete bot message
+            return currentMessages.slice(0, -1);
+          }
+          return currentMessages;
+        });
+      }
+    } catch {}
+  };
 
   return (
     <>
+      <ModelSelector
+        selectedModels={selectedModels}
+        setSelectedModels={setSelectedModels}
+        modelOptions={modelOptions}
+        maxSelected={4}
+      />
+
       <div className="flex-1 overflow-y-auto bg-gradient-to-b from-gray-50 to-white">
         <div className="max-w-7xl mx-auto px-3 py-6 space-y-6">
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Threadwork AI</p>
-              <h1 className="text-2xl font-semibold text-gray-900">Multi-model copilot</h1>
+              <h1 className="text-2xl font-semibold text-gray-900">Unified Intelligence Engine</h1>
             </div>
             <div className="flex items-center gap-3 text-sm text-gray-600">
               <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full">Synthesized answers</span>
-              <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full">4 model views</span>
-            </div>
-          </div>
-
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-              <div>
-                <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">Model Selection</p>
-                <p className="text-sm text-gray-600">Pick which models to include</p>
-              </div>
-              <input
-                type="text"
-                value={modelSearch}
-                onChange={(e) => setModelSearch(e.target.value)}
-                placeholder="Search models..."
-                className="w-56 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              />
-            </div>
-            <div className="p-4 space-y-3">
-              {filteredModels.map((opt) => (
-                <div
-                  key={opt.key}
-                  className="flex items-center justify-between px-3 py-3 border border-gray-100 rounded-lg hover:border-indigo-200 transition-colors"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{opt.label}</p>
-                    <p className="text-xs text-gray-500">Enable this model in the ensemble</p>
-                  </div>
-                  <label className="inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={!!selectedModels[opt.key]}
-                      onChange={() =>
-                        setSelectedModels((prev) => ({ ...prev, [opt.key]: !prev[opt.key] }))
-                      }
-                    />
-                    <span
-                      className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${
-                        selectedModels[opt.key] ? 'bg-indigo-600' : 'bg-gray-200'
-                      }`}
-                    >
-                      <span
-                        className={`bg-white w-4 h-4 rounded-full shadow transform transition-transform ${
-                          selectedModels[opt.key] ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </span>
-                  </label>
-                </div>
-              ))}
-
-              {filteredModels.length === 0 && (
-                <div className="text-center py-6 text-sm text-gray-500">
-                  No models found matching "{modelSearch}"
-                </div>
-              )}
             </div>
           </div>
 
@@ -684,15 +1168,18 @@ function HomePage() {
           ) : (
             <div className="space-y-4">
               {messages.map((message) => (
-                <div key={message.id}>
+                <div key={message.id} className="mb-6">
                   {message.sender === 'user' ? (
-                    <div className="flex justify-end mb-4">
-                      <div className="max-w-2xl bg-indigo-600 text-white rounded-lg rounded-br-none px-4 py-3">
-                        <p className="text-sm leading-relaxed">{message.text}</p>
+                    <div className="flex justify-end items-end gap-3">
+                      <div className="max-w-2xl bg-indigo-600 text-white rounded-xl rounded-br-none px-4 py-3 shadow-sm">
+                        <p className="text-sm leading-relaxed break-words">{message.text}</p>
+                      </div>
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold text-sm flex-shrink-0 mb-1">
+                        👤
                       </div>
                     </div>
                   ) : (
-                    <div className="flex gap-6 mb-4">
+                    <div className="flex gap-6">
                       {message.allResponses && Object.keys(message.allResponses || {}).length > 0 && (
                         <div className="flex-[0.75] max-w-xl space-y-4">
                           {[
@@ -724,21 +1211,35 @@ function HomePage() {
                               heading: 'text-emerald-700',
                               collapse: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
                             },
+                            {
+                              key: 'essential',
+                              title: 'Essential',
+                              container: 'bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200',
+                              heading: 'text-orange-700',
+                              collapse: 'bg-orange-50 text-orange-700 hover:bg-orange-100',
+                            },
+                            {
+                              key: 'moonshot',
+                              title: 'Moonshot',
+                              container: 'bg-gradient-to-br from-pink-50 to-pink-100 border border-pink-200',
+                              heading: 'text-pink-700',
+                              collapse: 'bg-pink-50 text-pink-700 hover:bg-pink-100',
+                            },
                           ]
                             .filter((item) => message.allResponses[item.key])
                             .map((item) => (
                               <div
                                 key={item.key}
-                                className={`${item.container} rounded-lg shadow-sm`}
+                                className={`${item.container} rounded-xl shadow-sm overflow-hidden border-l-4 transition-shadow hover:shadow-md`}
                               >
                                 <Collapsible
                                   defaultOpen={false}
-                                  titleClassName={`px-4 py-3 text-xs font-bold ${item.heading} uppercase tracking-wider`}
+                                  titleClassName={`px-4 py-3 text-xs font-bold ${item.heading} uppercase tracking-wider font-mono`}
                                   title={item.title}
                                   showCollapseButton={true}
-                                  collapseButtonClassName={item.collapse}
+                                  collapseButtonClassName={`mt-2 ${item.collapse} rounded-lg`}
                                 >
-                                  <div className="px-4 pb-6 pt-1 space-y-2 text-sm text-gray-900">
+                                  <div className="px-4 pb-4 pt-2 space-y-3 text-sm text-gray-900">
                                     {renderFormattedContent(message.allResponses[item.key] || 'No response', {
                                       headingClass: item.heading,
                                       bulletColor: item.heading,
@@ -751,21 +1252,37 @@ function HomePage() {
                       )}
 
                       <div className="flex-[2.25]">
-                        <div className="bg-gray-100 text-gray-900 rounded-lg rounded-bl-none h-fit" key={`detail-${message.id}`}>
-                          <Collapsible
-                            defaultOpen={message.id === lastBotId}
-                            titleClassName="px-4 py-3 text-xs font-semibold text-indigo-600 uppercase tracking-wider"
-                            title={<span>{message.model ? `✓ ${message.model}` : 'Threadwork AI'}</span>}
-                            showCollapseButton={true}
-                            collapseButtonClassName="bg-indigo-100 text-indigo-600 hover:bg-indigo-200"
-                          >
-                            <div className="px-4 pb-6 pt-1 space-y-3 text-gray-900">
-                              {renderFormattedContent(message.text || 'No response', {
-                                headingClass: 'text-indigo-700',
-                                bulletColor: 'text-indigo-600',
-                              })}
+                        <div className="bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900 rounded-xl rounded-bl-none h-fit shadow-sm" key={`detail-${message.id}`}>
+                          {message.text ? (
+                            <Collapsible
+                              defaultOpen={message.id === lastBotId}
+                              titleClassName="px-4 py-3 text-xs font-bold text-indigo-700 uppercase tracking-wider font-mono"
+                              title={<span className="flex items-center gap-3">
+                                <span className="text-emerald-600">✓</span>
+                                {message.model ? message.model : 'Threadwork AI'}
+                                {message.timings && (
+                                  <span className="ml-auto flex items-center gap-2 text-[10px] text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                                    <span>first: {Math.round(message.timings.firstModelMs)}ms</span>
+                                    <span>syn: {Math.round(message.timings.synthesisMs || 0)}ms</span>
+                                    <span>total: {Math.round(message.timings.totalMs)}ms</span>
+                                  </span>
+                                )}
+                              </span>}
+                              showCollapseButton={false}
+                              collapseButtonClassName="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-lg font-semibold"
+                            >
+                              <div className="px-4 pb-4 pt-2 space-y-3 text-sm text-gray-800">
+                                {renderSynthesis(message.text)}
+                              </div>
+                            </Collapsible>
+                          ) : (
+                            <div className="px-4 py-8 text-center">
+                              <div className="inline-block">
+                                <div className="animate-spin h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full"></div>
+                              </div>
+                              <p className="mt-3 text-sm text-gray-600">Synthesizing response...</p>
                             </div>
-                          </Collapsible>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -774,11 +1291,14 @@ function HomePage() {
               ))}
               {isLoading && (
                 <div className="flex justify-start">
-                  <div className="bg-gray-100 text-gray-900 px-4 py-3 rounded-lg rounded-bl-none">
-                    <div className="flex gap-2">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200"></div>
+                  <div className="bg-gradient-to-r from-gray-50 to-gray-100 text-gray-900 px-4 py-3 rounded-xl rounded-bl-none shadow-sm">
+                    <div className="flex gap-2 items-center">
+                      <span className="text-xs text-gray-600 font-medium">Generating response</span>
+                      <div className="flex gap-1.5 ml-2">
+                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -789,24 +1309,33 @@ function HomePage() {
         </div>
       </div>
 
-      <div className="border-t border-gray-200 bg-white">
-        <div className="max-w-7xl mx-auto px-3 py-4">
-          <form onSubmit={handleSendMessage} className="flex gap-3">
+      <div className="border-t border-gray-200 bg-white shadow-md">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <form onSubmit={handleSendMessage} className="flex gap-3 items-center">
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Send a message..."
+              placeholder="Ask anything..."
               disabled={isLoading}
-              className="flex-1 px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-500 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl text-gray-900 placeholder:text-gray-500 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             />
             <button
               type="submit"
               disabled={isLoading || !input.trim()}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               Send
             </button>
+            {isLoading && (
+              <button
+                type="button"
+                onClick={handleCancelStream}
+                className="px-4 py-3 bg-gray-200 text-gray-800 rounded-xl font-medium hover:bg-gray-300 transition-all"
+              >
+                Cancel
+              </button>
+            )}
           </form>
         </div>
       </div>

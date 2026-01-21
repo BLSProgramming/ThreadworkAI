@@ -50,8 +50,16 @@ def chat():
             },
             "qwen": {
                 "label": "Qwen",
-                "hf_model": "Qwen/Qwen3-Coder-30B-A3B-Instruct:nebius",
+                "hf_model": "Qwen/Qwen3-Coder-30B-A3B-Instruct:nebius",  
             },
+            "essential": {
+                "label": "Essential",
+                "hf_model": "EssentialAI/rnj-1-instruct:together",
+            },
+            "moonshot": {
+                "label": "Moonshot",
+                "hf_model": "moonshotai/Kimi-K2-Thinking:novita",
+            }
         }
 
         # Helper to invoke a model
