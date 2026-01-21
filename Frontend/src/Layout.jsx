@@ -11,10 +11,9 @@ function Layout({ children }) {
 
   return (
     <div className="flex h-screen bg-white">
-      {/* Navbar */}
+
       <UserNavbar isOpen={isNavbarOpen} onToggle={handleToggleNavbar} />
       
-      {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {children ? children : <Outlet />}
       </div>
