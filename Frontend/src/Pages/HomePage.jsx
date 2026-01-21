@@ -781,7 +781,8 @@ function HomePage() {
       } else {
         setMessages([]);
       }
-      pendingChatRef.current = null;
+      // Don't clear pendingChatRef here - let the abort useEffect handle it
+      // pendingChatRef.current = null;
     } else {
       setMessages([]);
     }
@@ -804,8 +805,28 @@ function HomePage() {
   }, []);
 
   useEffect(() => {
-    // When chatId changes, if we're still loading, abort and clean up
+    console.log('[UI] chatId useEffect fired', { 
+      chatId, 
+      isLoading, 
+      hasAbortController: !!currentAbortRef.current,
+      pendingChatId: pendingChatRef.current?.id,
+      doIdsMatch: pendingChatRef.current?.id === chatId,
+      shouldAbort: isLoading && currentAbortRef.current && !(pendingChatRef.current && pendingChatRef.current.id === chatId)
+    });
+    
     if (isLoading && currentAbortRef.current) {
+      if (pendingChatRef.current && pendingChatRef.current.id === chatId) {
+        console.log('[UI] This is a new chat we just created, NOT aborting. Clearing pendingChatRef.');
+        pendingChatRef.current = null; 
+        return; 
+      }
+      
+      console.log('[UI] Aborting stream due to chatId change', {
+        reason: 'chatId changed but not matching pending',
+        pendingId: pendingChatRef.current?.id,
+        newChatId: chatId,
+        comparison: `"${pendingChatRef.current?.id}" === "${chatId}" = ${pendingChatRef.current?.id === chatId}`
+      });
       try {
         currentAbortRef.current.abort();
         currentAbortRef.current = null;
@@ -838,23 +859,51 @@ function HomePage() {
   }, [messages, chatId]);
 
   const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!input.trim()) return;
+    if (e && e.preventDefault) {
+      e.preventDefault();
+    }
+    if (e && e.stopPropagation) {
+      e.stopPropagation();
+    }
+    
+    console.log('[UI] handleSendMessage called', { 
+      hasInput: !!input?.trim(), 
+      inputValue: input,
+      isLoading, 
+      chatId,
+      modelsState: selectedModels 
+    });
+    
+    if (!input || !input.trim()) {
+      console.log('[UI] Empty input, returning');
+      return;
+    }
 
     const activeModels = modelOptions
       .filter((opt) => selectedModels[opt.key])
       .map((opt) => opt.key);
 
-    if (!activeModels.length) return;
+    console.log('[UI] Active models:', activeModels, 'from selectedModels:', selectedModels);
+
+    if (!activeModels.length) {
+      console.warn('[UI] No models selected!');
+      return;
+    }
 
     const userMessage = { id: Date.now(), text: input, sender: 'user' };
     const nextMessages = [...messages, userMessage];
     const savedInput = input;
 
     let currentChatId = chatId;
+    let isNewChat = false;
     if (!chatId) {
       const newChatId = `chat-${Date.now()}`;
       currentChatId = newChatId;
+      isNewChat = true;
+      
+      console.log('[UI] Creating new chat', { newChatId });
+      
+      // Set pending chat ref FIRST before navigation
       pendingChatRef.current = { id: newChatId, userMessage: nextMessages };
 
       const chats = JSON.parse(localStorage.getItem('chats') || '[]');
@@ -869,7 +918,6 @@ function HomePage() {
       setTimeout(() => {
         window.dispatchEvent(new Event('chats-updated'));
       }, 0);
-      navigate(`/chat/${newChatId}`);
     } else {
       setMessages(nextMessages);
       persistChats((chats) => {
@@ -887,27 +935,25 @@ function HomePage() {
 
     setInput('');
     setIsLoading(true);
-    // Setup abort controller for this stream
+ 
     if (currentAbortRef.current) {
       try { currentAbortRef.current.abort(); } catch {}
     }
     const abortController = new AbortController();
     currentAbortRef.current = abortController;
 
-    // Timings
     const startTs = performance.now();
     let firstModelMs = null;
     let synthesisMs = null;
 
     // Collect all responses as they stream in
     const allResponses = {};
-    let synthesisResponse = null;
 
     try {
       await streamChat(
         savedInput,
         activeModels,
-        // onModelResponse - handle each model response as it arrives
+ 
         (modelData) => {
           const { model, response } = modelData;
           allResponses[model.toLowerCase()] = response;
@@ -916,14 +962,13 @@ function HomePage() {
             firstModelMs = performance.now() - startTs;
           }
 
-          // Update messages with streaming responses
+
           setMessages((currentMessages) => {
             const existingBotMessage = currentMessages.find(
               (m) => m.sender === 'bot' && m.id === userMessage.id + 1
             );
 
             if (existingBotMessage) {
-              // Update existing bot message with new responses
               return currentMessages.map((m) =>
                 m.id === existingBotMessage.id
                   ? {
@@ -933,10 +978,10 @@ function HomePage() {
                   : m
               );
             } else {
-              // Create new bot message - start with empty text, will be filled by synthesis
+
               const newBotMessage = {
                 id: userMessage.id + 1,
-                text: null, // Don't show placeholder - wait for synthesis
+                text: null,
                 sender: 'bot',
                 model: 'Threadwork AI',
                 allResponses: allResponses,
@@ -945,10 +990,9 @@ function HomePage() {
             }
           });
         },
-        // onSynthesis - handle synthesis response when it arrives
+  
         (synthesisData) => {
           const { response } = synthesisData;
-          synthesisResponse = response;
           synthesisMs = performance.now() - startTs;
 
           setMessages((currentMessages) => {
@@ -1064,7 +1108,6 @@ function HomePage() {
         currentAbortRef.current.abort();
         currentAbortRef.current = null;
         setIsLoading(false);
-        // Remove the pending bot message if stream is canceled
         setMessages((currentMessages) => {
           const lastMsg = currentMessages[currentMessages.length - 1];
           if (lastMsg && lastMsg.sender === 'bot' && !lastMsg.text) {
