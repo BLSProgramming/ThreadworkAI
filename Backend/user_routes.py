@@ -16,11 +16,6 @@ def check_password(password, hashed_password):
 # Gets the users profile
 @user_routes.route('/api/user/profile', methods=['GET'])
 def get_user_profile():
-    """
-    Get user profile information.
-    For now, returns mock data. In production, would check session/token
-    and return actual user data from database.
-    """
     # TODO: Get user_id from session or JWT token
     # For now, returning the most recent user as a placeholder
     user_id = session.get('user_id')
