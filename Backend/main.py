@@ -1,9 +1,10 @@
 from flask import Flask
 from flask_cors import CORS
 from signup_login import signup_routes
-from chat_routes import chat_routes
-from user_routes import user_routes
-from trial_chat import trial_chat
+from Backend.chat_routes import chat_routes
+from Backend.chat_routes.user_routes import user_routes
+from Backend.chat_routes.trial_chat import trial_chat
+from Backend.google_auth import google_auth_blueprint
 import secrets
 from dotenv import load_dotenv
 
@@ -21,6 +22,7 @@ app.register_blueprint(signup_routes)
 app.register_blueprint(chat_routes)
 app.register_blueprint(user_routes)
 app.register_blueprint(trial_chat)
+app.register_blueprint(google_auth_blueprint)
 
 if __name__ == "__main__":
     app.run(port=5000, debug=True)
