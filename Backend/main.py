@@ -1,10 +1,10 @@
 from flask import Flask
 from flask_cors import CORS
 from signup_login import signup_routes
-from Backend.chat_routes import chat_routes
+from chat_routes import chat_routes
 from user_routes import user_routes
 from trial_chat import trial_chat
-from Backend.google_auth import google_auth_blueprint
+from google_auth import google_auth_blueprint
 import secrets
 from dotenv import load_dotenv
 
