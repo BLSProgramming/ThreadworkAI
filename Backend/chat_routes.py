@@ -345,7 +345,6 @@ RULES:
                     print(f"[GPT-OSS] Synthesis error: {error_msg}")
                     yield f"data: {json.dumps({'type': 'synthesis', 'data': {'model': 'GPT-OSS', 'response': f'Synthesis error: {error_msg}', 'error': True}})}\n\n"
             elif enable_synthesis:
-                # When synthesis can't run (insufficient responses), provide context
                 successful_count = len(successful_results)
                 total_requested = len(selected_models)
                 min_needed = max(1, min_for_synthesis)
