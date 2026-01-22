@@ -38,7 +38,6 @@ function Login() {
           }
         } catch (checkErr) {
           console.error('Profile check error:', checkErr);
-          // On any check failure, fall back to home to avoid blocking login
           navigate('/home');
         }
       } else {
@@ -91,7 +90,6 @@ function Login() {
               <p className="text-gray-500">Welcome back to Threadwork</p>
             </div>
 
-            {/* Google OAuth - Top */}
             <GoogleOAuth onSuccess={handleGoogleSuccess} isSignup={false} />
 
             {/* Error Message */}
