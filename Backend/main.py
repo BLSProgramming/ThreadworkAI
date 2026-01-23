@@ -5,6 +5,7 @@ from chat_routes import chat_routes
 from user_routes import user_routes
 from trial_chat import trial_chat
 from google_auth import google_auth_blueprint
+from google_profile import profile_blueprint
 import secrets
 from dotenv import load_dotenv
 
@@ -23,6 +24,7 @@ app.register_blueprint(chat_routes)
 app.register_blueprint(user_routes)
 app.register_blueprint(trial_chat)
 app.register_blueprint(google_auth_blueprint)
+app.register_blueprint(profile_blueprint)
 
 if __name__ == "__main__":
     app.run(port=5000, debug=True)
