@@ -91,21 +91,6 @@ def chat():
             try:
                 response_text, elapsed = _call_once()
                 print(f"[{cfg['label']}] Success: {elapsed:.2f}s ({len(response_text)} chars)")
-
-                if user_id:
-                    try:
-                        connection = get_db_connection()
-                        cursor = connection.cursor()
-                        cursor.execute("""
-                            INSERT INTO chats (user_id, model_name, user_message, model_response)
-                            VALUES (%s, %s, %s, %s)
-                        """, (user_id, cfg["label"], user_message, response_text))
-                        connection.commit()
-                        cursor.close()
-                        connection.close()
-                    except Exception as db_err:
-                        print(f"[DB] Failed to save response: {db_err}")
-
                 return {
                     "model": cfg["label"],
                     "response": response_text,
@@ -351,11 +336,10 @@ RULES:
                     cursor = connection.cursor()
 
                     cursor.execute("""
-                                INSERT INTO chats (user_id, model_name, user_message,  model_response)
-                                VALUES (%(user_id)s, %(model_name)s, %(user_message)s, %(model_response)s)
+                                INSERT INTO chats (user_id, user_message, model_response)
+                                VALUES (%(user_id)s, %(user_message)s, %(model_response)s)
                                 """, {
                         'user_id': user_id,
-                        'model_name': "GPT-OSS",
                         'user_message': user_message,
                         'model_response': synthesis_response
                     })
