@@ -1,105 +1,81 @@
+from flask import request, jsonify, Blueprint
 from google.oauth2 import id_token
 from google.auth.transport import requests
-from flask import request, jsonify, Blueprint
-
 from utils import create_jwt
 from auth_user import get_or_create_user
-
 from dotenv import load_dotenv
 import os
 
 load_dotenv()
 
 google_auth_blueprint = Blueprint("auth", __name__)
+GOOGLE_CLIENT_ID = os.getenv("CLIENT_ID")
 
-GOOGLE_CLIENT_ID = os.getenv('CLIENT_ID')
+@google_auth_blueprint.route("/api/google-login", methods=["POST"])
+def google_login():
+    print("🔥 ENTERED /api/google-login ROUTE")
 
-@google_auth_blueprint.route('/api/google-signup', methods=["POST"])
-def google_signup():
+    # Parse JSON safely
+    data = request.get_json(force=True, silent=True)
+    print("Request JSON:", data)
+
+    if not data or "credential" not in data:
+        print("❌ No credential provided in request")
+        return jsonify({"error": "Missing credential"}), 400
+
+    credential = data["credential"]
+
+    # Verify Google token
     try:
-        credential = request.json.get("credential")
-        
-        if not credential:
-            return jsonify({"error": "No credential provided"}), 400
-
-        # Verify the Google token
+        print("🔹 Verifying Google token...")
         idinfo = id_token.verify_oauth2_token(
             credential,
             requests.Request(),
             GOOGLE_CLIENT_ID
         )
+        print("✅ Token verified successfully")
+        print("IDINFO:", idinfo)
 
-        # Create or get user
+    except ValueError as e:
+        # Invalid token
+        print("❌ Google token verification failed:", str(e))
+        return jsonify({"error": "Invalid Google token"}), 401
+    except Exception as e:
+        print("❌ Unexpected error during token verification:", str(e))
+        return jsonify({"error": "Token verification error"}), 500
+
+    # Create or fetch user from DB
+    try:
         user = get_or_create_user(
             google_id=idinfo["sub"],
             email=idinfo["email"],
             name=idinfo.get("name")
         )
+        print("User fetched/created:", user)
 
-        # Create JWT token
-        jwt_token = create_jwt(user["id"])
-        
-        response_data = {
-            "token": jwt_token,
-            "user": {
-                "id": user["id"],
-                "email": user["email"]
-            },
-            "needsProfile": user.get("needsProfile", False)
-        }
-        
-        print("Google signup response:", response_data)
-        print("Token type:", type(jwt_token))
-        
-        return jsonify(response_data), 200
-
-    except ValueError as e:
-        # Invalid token
-        print("Google signup ValueError:", str(e))
-        return jsonify({"error": "Invalid Google token"}), 401
     except Exception as e:
-        print("Google signup Exception:", str(e))
+        print("❌ Error in get_or_create_user:", str(e))
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Database error"}), 500
 
-
-@google_auth_blueprint.route('/api/google-login', methods=["POST"])
-def google_login():
+    # Create JWT
     try:
-        credential = request.json.get("credential")
-        
-        if not credential:
-            return jsonify({"error": "No credential provided"}), 400
-
-        # Verify the Google token
-        idinfo = id_token.verify_oauth2_token(
-            credential,
-            requests.Request(),
-            GOOGLE_CLIENT_ID
-        )
-
-        # Get or create user (same logic as signup for OAuth)
-        user = get_or_create_user(
-            google_id=idinfo["sub"],
-            email=idinfo["email"],
-            name=idinfo.get("name")
-        )
-
-        # Create JWT token
         jwt_token = create_jwt(user["id"])
-
-        return jsonify({
-            "token": jwt_token,
-            "user": {
-                "id": user["id"],
-                "email": user["email"]
-            },
-            "needsProfile": user.get("needsProfile", False)
-        }), 200
-
-    except ValueError as e:
-        # Invalid token
-        return jsonify({"error": "Invalid Google token"}), 401
+        print("JWT token created:", jwt_token)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print("❌ Error creating JWT:", str(e))
+        return jsonify({"error": "JWT creation failed"}), 500
+
+    # Return response
+    response_data = {
+        "token": jwt_token,
+        "user": {
+            "id": user["id"],
+            "email": user["email"]
+        },
+        "needsProfile": user.get("needsProfile", False)
+    }
+
+    print("🔹 Response data ready:", response_data)
+    return jsonify(response_data), 200
