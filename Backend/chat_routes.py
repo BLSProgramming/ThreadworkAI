@@ -1,4 +1,5 @@
-from flask import Blueprint, request, jsonify, Response
+from flask import Blueprint, request, jsonify, Response, session
+from db_connection import get_db_connection
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -18,6 +19,7 @@ client = OpenAI(
 
 @chat_routes.route('/api/chat', methods=['POST'])
 def chat():
+    user_id = session['user_id']
     """
     Handle chat messages with streaming responses.
     Expects JSON: { "message": "user message here", "models": ["deepseek", "llama", "glm", "qwen"], "stream": true }
@@ -25,7 +27,7 @@ def chat():
     """
     try:
         data = request.json
-        user_message = f"{data.get('message', '').strip()}. English only"
+        user_message = f"{data.get('message', '').strip()}. English only. Do not mention in your response that I asked this"
         selected_models = data.get('models') or ['deepseek', 'llama', 'glm', 'qwen']
         valid_model_names = {'deepseek', 'llama', 'glm', 'qwen', 'essential', 'moonshot'}
         selected_models = [m for m in selected_models if m in valid_model_names]
@@ -85,9 +87,25 @@ def chat():
                     raise ValueError("Model returned empty response")
                 return response_text, elapsed
 
+
             try:
                 response_text, elapsed = _call_once()
                 print(f"[{cfg['label']}] Success: {elapsed:.2f}s ({len(response_text)} chars)")
+
+                if user_id:
+                    try:
+                        connection = get_db_connection()
+                        cursor = connection.cursor()
+                        cursor.execute("""
+                            INSERT INTO chats (user_id, model_name, user_message, model_response)
+                            VALUES (%s, %s, %s, %s)
+                        """, (user_id, cfg["label"], user_message, response_text))
+                        connection.commit()
+                        cursor.close()
+                        connection.close()
+                    except Exception as db_err:
+                        print(f"[DB] Failed to save response: {db_err}")
+
                 return {
                     "model": cfg["label"],
                     "response": response_text,
@@ -123,7 +141,6 @@ def chat():
                     }
 
         def generate():
-            
             successful_results = []  
             failed_results = []  
             
@@ -137,6 +154,7 @@ def chat():
                         future = executor.submit(invoke_model, cfg)
                         futures[future] = model_key
 
+
                 # Yield responses as they complete (only send successful ones to frontend)
                 for future in concurrent.futures.as_completed(futures):
                     result = future.result()
@@ -147,6 +165,8 @@ def chat():
                     else:
                         failed_results.append(result)
                         print(f"[{result['model']}] Skipped from stream (failed): {result.get('error', 'unknown')}")
+
+
             # Optional synthesis step (requires minimum responses)
             if enable_synthesis and len(successful_results) >= min_for_synthesis:
                 num_models = len(successful_results)
@@ -325,6 +345,24 @@ RULES:
                     )
                     elapsed = time.time() - start_time
                     synthesis_response = completion.choices[0].message.content
+
+                    # user_id = session['user_id']
+                    connection = get_db_connection()
+                    cursor = connection.cursor()
+
+                    cursor.execute("""
+                                INSERT INTO chats (user_id, model_name, user_message,  model_response)
+                                VALUES (%(user_id)s, %(model_name)s, %(user_message)s, %(model_response)s)
+                                """, {
+                        'user_id': user_id,
+                        'model_name': "GPT-OSS",
+                        'user_message': user_message,
+                        'model_response': synthesis_response
+                    })
+
+                    connection.commit()
+                    cursor.close()
+                    connection.close()
                     
                     # Log synthesis quality metrics
                     synthesis_len = len(synthesis_response)
