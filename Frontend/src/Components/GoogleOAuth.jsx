@@ -10,8 +10,12 @@ function GoogleOAuth({ onSuccess, isSignup = false }) {
     // Initialize Google Sign-In
     const initializeGoogleSignIn = () => {
       if (window.google) {
+        const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+        console.log('🔍 Initializing Google Sign-In with client_id:', clientId);
+        console.log('🌐 Current origin:', window.location.origin);
+        
         window.google.accounts.id.initialize({
-          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+          client_id: clientId,
           callback: handleGoogleCallback,
           auto_select: false,
           cancel_on_tap_outside: true

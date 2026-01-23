@@ -1,8 +1,7 @@
 from google.oauth2 import id_token
 from google.auth.transport import requests
-from flask import request, jsonify, Blueprint
+from flask import request, jsonify, Blueprint, session
 
-from utils import create_jwt
 from auth_user import get_or_create_user
 
 from dotenv import load_dotenv
@@ -13,6 +12,7 @@ load_dotenv()
 google_auth_blueprint = Blueprint("auth", __name__)
 
 GOOGLE_CLIENT_ID = os.getenv('CLIENT_ID')
+print(f"🔧 Backend Google CLIENT_ID loaded: {GOOGLE_CLIENT_ID}")
 
 @google_auth_blueprint.route('/api/google-signup', methods=["POST"])
 def google_signup():
@@ -36,20 +36,15 @@ def google_signup():
             name=idinfo.get("name")
         )
 
-        # Create JWT token
-        jwt_token = create_jwt(user["id"])
+        session['user_id'] = user["id"]
         
         response_data = {
-            "token": jwt_token,
             "user": {
                 "id": user["id"],
                 "email": user["email"]
             },
             "needsProfile": user.get("needsProfile", False)
         }
-        
-        print("Google signup response:", response_data)
-        print("Token type:", type(jwt_token))
         
         return jsonify(response_data), 200
 
@@ -86,11 +81,9 @@ def google_login():
             name=idinfo.get("name")
         )
 
-        # Create JWT token
-        jwt_token = create_jwt(user["id"])
+        session['user_id'] = user["id"]
 
         return jsonify({
-            "token": jwt_token,
             "user": {
                 "id": user["id"],
                 "email": user["email"]
