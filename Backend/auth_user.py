@@ -29,7 +29,7 @@ def get_or_create_user(google_id, email, name):
 
     # Create new user
     cursor.execute("""
-        INSERT INTO users (google_id, email, name)
+        INSERT INTO users (google_id, email, full_name)
         VALUES (%s, %s, %s)
         RETURNING id, email
         """,
