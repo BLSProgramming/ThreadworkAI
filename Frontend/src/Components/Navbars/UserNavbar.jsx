@@ -32,44 +32,40 @@ function UserNavbar({ isOpen = true, onToggle }) {
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.chats) {
+          console.log('[UserNavbar] Backend chats:', data.chats);
           // Transform backend chats to match frontend format
-          const formattedChats = data.chats.map(chat => ({
-            id: `chat-${chat.id}`,
-            title: chat.chat_name || chat.user_message?.substring(0, 30) || 'Chat',
-            createdAt: chat.created_at,
-            messages: [
-              { id: chat.id * 2, text: chat.user_message, sender: 'user' },
-              { id: chat.id * 2 + 1, text: chat.model_response, sender: 'bot' }
-            ]
-          }));
+          const formattedChats = data.chats.map(chat => {
+            console.log('[UserNavbar] Transforming chat:', { id: chat.id, has_response: !!chat.model_response });
+            return {
+              id: `chat-${chat.id}`,
+              title: chat.chat_name || chat.user_message?.substring(0, 30) || 'Chat',
+              createdAt: chat.created_at,
+              messages: [
+                { id: chat.id * 2, text: chat.user_message || 'User message', sender: 'user' },
+                { id: chat.id * 2 + 1, text: chat.model_response || 'No response', sender: 'bot' }
+              ]
+            };
+          });
           
-          // Merge with localStorage chats (prioritize localStorage for newer chats)
+          // Display only backend chats
+          setChats(formattedChats);
           const storageKey = getChatStorageKey();
-          const localChats = JSON.parse(localStorage.getItem(storageKey) || '[]');
-          
-          // Only add backend chats that don't exist in localStorage
-          const localChatIds = new Set(localChats.map(c => c.id));
-          const newChats = formattedChats.filter(c => !localChatIds.has(c.id));
-          
-          const mergedChats = [...localChats, ...newChats];
-          setChats(mergedChats);
-          localStorage.setItem(storageKey, JSON.stringify(mergedChats));
+          localStorage.setItem(storageKey, JSON.stringify(formattedChats));
         }
       }
     } catch (error) {
       console.error('Failed to fetch chats from backend:', error);
+      // Fallback to localStorage if backend fails
+      const storageKey = getChatStorageKey();
+      const savedChats = localStorage.getItem(storageKey);
+      if (savedChats) {
+        setChats(JSON.parse(savedChats));
+      }
     }
   };
 
-  // Load chats from localStorage and backend on mount
+  // Load chats from backend on mount
   useEffect(() => {
-    const storageKey = getChatStorageKey();
-    const savedChats = localStorage.getItem(storageKey);
-    if (savedChats) {
-      setChats(JSON.parse(savedChats));
-    }
-    
-    // Fetch from backend to sync
     fetchChatsFromBackend();
     setIsInitialized(true);
   }, []);
