@@ -91,21 +91,6 @@ def chat():
             try:
                 response_text, elapsed = _call_once()
                 print(f"[{cfg['label']}] Success: {elapsed:.2f}s ({len(response_text)} chars)")
-
-                if user_id:
-                    try:
-                        connection = get_db_connection()
-                        cursor = connection.cursor()
-                        cursor.execute("""
-                            INSERT INTO chats (user_id, model_name, user_message, model_response)
-                            VALUES (%s, %s, %s, %s)
-                        """, (user_id, cfg["label"], user_message, response_text))
-                        connection.commit()
-                        cursor.close()
-                        connection.close()
-                    except Exception as db_err:
-                        print(f"[DB] Failed to save response: {db_err}")
-
                 return {
                     "model": cfg["label"],
                     "response": response_text,
@@ -140,6 +125,7 @@ def chat():
                         "elapsed": 0,
                     }
 
+        # noinspection PyTypeChecker
         def generate():
             successful_results = []  
             failed_results = []  
@@ -351,11 +337,10 @@ RULES:
                     cursor = connection.cursor()
 
                     cursor.execute("""
-                                INSERT INTO chats (user_id, model_name, user_message,  model_response)
-                                VALUES (%(user_id)s, %(model_name)s, %(user_message)s, %(model_response)s)
+                                INSERT INTO chats (user_id, user_message, model_response)
+                                VALUES (%(user_id)s, %(user_message)s, %(model_response)s)
                                 """, {
                         'user_id': user_id,
-                        'model_name': "GPT-OSS",
                         'user_message': user_message,
                         'model_response': synthesis_response
                     })
@@ -363,7 +348,37 @@ RULES:
                     connection.commit()
                     cursor.close()
                     connection.close()
-                    
+
+                    @chat_routes.route('/api/chat/history', methods=['GET'])
+                    def chat_history():
+                        if 'user_id' not in session:
+                            return jsonify({"error": "Not authenticated"}), 401
+
+                        user_id = session['user_id']
+
+                        connection = get_db_connection()
+                        cursor = connection.cursor(dictionary=True)
+
+                        cursor.execute("""
+                            SELECT id, user_message, model_response, created_at
+                            FROM chats
+                            WHERE user_id = %(user_id)s
+                            ORDER BY created_at DESC
+                            LIMIT 50
+                        """, {
+                            'user_id': user_id
+                        })
+
+                        chats = cursor.fetchall()
+
+                        cursor.close()
+                        connection.close()
+
+                        return jsonify({
+                            "success": True,
+                            "chats": chats
+                        })
+
                     # Log synthesis quality metrics
                     synthesis_len = len(synthesis_response)
                     has_reasoning = "===REASONING===" in synthesis_response
