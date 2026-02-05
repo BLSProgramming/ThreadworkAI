@@ -349,36 +349,6 @@ RULES:
                     cursor.close()
                     connection.close()
 
-                    @chat_routes.route('/api/chat/history', methods=['GET'])
-                    def chat_history():
-                        if 'user_id' not in session:
-                            return jsonify({"error": "Not authenticated"}), 401
-
-                        user_id = session['user_id']
-
-                        connection = get_db_connection()
-                        cursor = connection.cursor(dictionary=True)
-
-                        cursor.execute("""
-                            SELECT id, user_message, model_response, created_at
-                            FROM chats
-                            WHERE user_id = %(user_id)s
-                            ORDER BY created_at DESC
-                            LIMIT 50
-                        """, {
-                            'user_id': user_id
-                        })
-
-                        chats = cursor.fetchall()
-
-                        cursor.close()
-                        connection.close()
-
-                        return jsonify({
-                            "success": True,
-                            "chats": chats
-                        })
-
                     # Log synthesis quality metrics
                     synthesis_len = len(synthesis_response)
                     has_reasoning = "===REASONING===" in synthesis_response
@@ -416,3 +386,33 @@ RULES:
             "error": str(err),
             "success": False
         }), 500
+
+@chat_routes.route('/api/chats', methods=['GET'])
+def chat_history():
+    if 'user_id' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    user_id = session['user_id']
+
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+
+    cursor.execute("""
+            SELECT id, user_message, model_response, created_at
+            FROM chats
+            WHERE user_id = %(user_id)s
+            ORDER BY created_at DESC
+            LIMIT 50
+        """, {
+                'user_id': user_id
+            })
+
+    chats = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return jsonify({
+        "success": True,
+        "chats": chats
+    })
