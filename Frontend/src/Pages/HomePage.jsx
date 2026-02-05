@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { HiLightningBolt } from '../assets/Icons';
 import Collapsible from '../Components/Collapsible';
 import { streamChat } from '../utils/streamChat';
@@ -10,7 +10,6 @@ import { parseSynthesisNew, parseReasoningSections, MODEL_OPTIONS, MODEL_STYLES,
 
 function HomePage() {
   // State
-  const navigate = useNavigate();
   const { chatId } = useParams();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -25,7 +24,7 @@ function HomePage() {
 
   // Hooks
   const { renderFormattedContent } = useContentRenderer();
-  const { persistChats, saveChatToDatabase } = useChatPersistence();
+  const { persistChats, saveChatToDatabase, getChatStorageKey } = useChatPersistence();
 
   // Constants
   const modelOptions = useMemo(() => MODEL_OPTIONS, []);
@@ -36,10 +35,6 @@ function HomePage() {
     }
     return null;
   }, [messages]);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
 
   // Synthesis rendering wrapper
   const renderSynthesis = (text) => {
@@ -176,22 +171,22 @@ function HomePage() {
   useEffect(() => {
     isLoadingChatRef.current = true;
     if (chatId) {
-      const chats = JSON.parse(localStorage.getItem('chats') || '[]');
+      const storageKey = getChatStorageKey();
+      const chats = JSON.parse(localStorage.getItem(storageKey) || '[]');
       const currentChat = chats.find((chat) => chat.id === chatId);
       if (currentChat && currentChat.messages) {
         setMessages(currentChat.messages);
       } else {
         setMessages([]);
       }
-      // Don't clear pendingChatRef here - let the abort useEffect handle it
-      // pendingChatRef.current = null;
+
     } else {
       setMessages([]);
     }
     setTimeout(() => {
       isLoadingChatRef.current = false;
     }, 100);
-  }, [chatId]);
+  }, [chatId, getChatStorageKey]);
 
   // Auto-scroll and syntax highlighting on message updates
   useEffect(() => {
@@ -308,7 +303,8 @@ function HomePage() {
       // Set pending chat ref FIRST before navigation
       pendingChatRef.current = { id: newChatId, userMessage: nextMessages };
 
-      const chats = JSON.parse(localStorage.getItem('chats') || '[]');
+      const storageKey = getChatStorageKey();
+      const chats = JSON.parse(localStorage.getItem(storageKey) || '[]');
       const newChat = {
         id: newChatId,
         title: input.substring(0, 30) || 'New Chat',
@@ -316,7 +312,7 @@ function HomePage() {
         messages: nextMessages,
       };
       chats.unshift(newChat);
-      localStorage.setItem('chats', JSON.stringify(chats));
+      localStorage.setItem(storageKey, JSON.stringify(chats));
       setTimeout(() => {
         window.dispatchEvent(new Event('chats-updated'));
       }, 0);
