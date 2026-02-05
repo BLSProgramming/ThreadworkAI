@@ -395,7 +395,7 @@ def chat_history():
     user_id = session['user_id']
 
     connection = get_db_connection()
-    cursor = connection.cursor(dictionary=True)
+    cursor = connection.cursor()
 
     cursor.execute("""
             SELECT id, user_message, model_response, created_at
