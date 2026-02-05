@@ -34,15 +34,21 @@ function UserNavbar({ isOpen = true, onToggle }) {
         if (data.success && data.chats) {
           console.log('[UserNavbar] Backend chats:', data.chats);
           // Transform backend chats to match frontend format
-          const formattedChats = data.chats.map(chat => {
-            console.log('[UserNavbar] Transforming chat:', { id: chat.id, has_response: !!chat.model_response });
+          // Backend returns tuples [id, user_message, model_response, created_at]
+          const formattedChats = data.chats.map((chat, index) => {
+            const chatId = Array.isArray(chat) ? chat[0] : chat.id;
+            const userMsg = Array.isArray(chat) ? chat[1] : chat.user_message;
+            const modelResp = Array.isArray(chat) ? chat[2] : chat.model_response;
+            const createdAt = Array.isArray(chat) ? chat[3] : chat.created_at;
+            
+            console.log('[UserNavbar] Transforming chat:', { chatId, hasResponse: !!modelResp });
             return {
-              id: `chat-${chat.id}`,
-              title: chat.chat_name || chat.user_message?.substring(0, 30) || 'Chat',
-              createdAt: chat.created_at,
+              id: `chat-${chatId}`,
+              title: userMsg?.substring(0, 30) || 'Chat',
+              createdAt: createdAt,
               messages: [
-                { id: chat.id * 2, text: chat.user_message || 'User message', sender: 'user' },
-                { id: chat.id * 2 + 1, text: chat.model_response || 'No response', sender: 'bot' }
+                { id: chatId * 2, text: userMsg || 'User message', sender: 'user' },
+                { id: chatId * 2 + 1, text: modelResp || 'No response', sender: 'bot' }
               ]
             };
           });
