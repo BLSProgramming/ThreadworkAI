@@ -416,3 +416,35 @@ def chat_history():
         "success": True,
         "chats": chats
     })
+
+@chat_routes.route('/api/chats/save', methods=['POST'])
+def update_chat_name():
+    if 'user_id' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    user_id = session['user_id']
+    data = request.json
+
+    chat_name = data.get("title")  # frontend sends new name
+    if not chat_name:
+        return jsonify({"error": "Missing chat_name"}), 400
+
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    # Update the chat_name for this user
+    cursor.execute("""
+        UPDATE chats
+        SET chat_name = %(chat_name)s
+        WHERE user_id = %(user_id)s
+    """,
+        {"chat_name": chat_name,
+         "user_id": user_id
+         })
+
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+    return jsonify({"success": True, "chat_name": chat_name})
+
