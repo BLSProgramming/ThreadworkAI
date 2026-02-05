@@ -7,6 +7,12 @@ export const useChatPersistence = () => {
   const persistTimerRef = useRef(null);
   const pendingPersistRef = useRef(null);
 
+  // Get user-specific localStorage key
+  const getChatStorageKey = useCallback(() => {
+    const userId = localStorage.getItem('current_user_id');
+    return userId ? `chats_user_${userId}` : 'chats';
+  }, []);
+
   // Format chat data for PostgreSQL storage
   const formatChatForDatabase = useCallback((chatId, title, messages) => {
     return {
@@ -48,15 +54,16 @@ export const useChatPersistence = () => {
 
   // Batch localStorage writes to reduce churn during streaming
   const persistChats = useCallback((updater) => {
-    const chats = JSON.parse(localStorage.getItem('chats') || '[]');
+    const storageKey = getChatStorageKey();
+    const chats = JSON.parse(localStorage.getItem(storageKey) || '[]');
     const updated = updater(chats);
-    pendingPersistRef.current = updated;
+    pendingPersistRef.current = { key: storageKey, data: updated };
 
     if (!persistTimerRef.current) {
       persistTimerRef.current = setTimeout(() => {
         const payload = pendingPersistRef.current;
         if (payload) {
-          localStorage.setItem('chats', JSON.stringify(payload));
+          localStorage.setItem(payload.key, JSON.stringify(payload.data));
           setTimeout(() => window.dispatchEvent(new Event('chats-updated')), 0);
         }
         pendingPersistRef.current = null;
@@ -65,11 +72,12 @@ export const useChatPersistence = () => {
     }
 
     return updated;
-  }, []);
+  }, [getChatStorageKey]);
 
   // Save chat to database
   const saveChatToDatabase = useCallback(async (chatId) => {
-    const chats = JSON.parse(localStorage.getItem('chats') || '[]');
+    const storageKey = getChatStorageKey();
+    const chats = JSON.parse(localStorage.getItem(storageKey) || '[]');
     const chat = chats.find(c => c.id === chatId);
     
     if (!chat) return;
@@ -98,7 +106,7 @@ export const useChatPersistence = () => {
     } catch (error) {
       console.error('Failed to save chat to database:', error);
     }
-  }, [formatChatForDatabase]);
+  }, [formatChatForDatabase, getChatStorageKey]);
 
   // Fetch chats from backend
   const fetchChatsFromBackend = useCallback(async () => {
@@ -123,5 +131,6 @@ export const useChatPersistence = () => {
     saveChatToDatabase,
     fetchChatsFromBackend,
     formatChatForDatabase,
+    getChatStorageKey,
   };
 };

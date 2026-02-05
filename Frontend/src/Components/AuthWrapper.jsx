@@ -16,14 +16,21 @@ function AuthWrapper({ children }) {
         });
         
         if (response.ok) {
+          const data = await response.json();
+          // Store user_id for user-specific localStorage
+          if (data.user_id) {
+            localStorage.setItem('current_user_id', data.user_id);
+          }
           setIsAuthenticated(true);
           setIsChecking(false);
         } else {
           // Not authenticated, redirect to login
+          localStorage.removeItem('current_user_id');
           navigate('/login', { replace: true });
         }
       } catch (err) {
         console.error('Auth check error:', err);
+        localStorage.removeItem('current_user_id');
         navigate('/login', { replace: true });
       }
     };

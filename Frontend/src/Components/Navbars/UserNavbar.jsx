@@ -14,26 +14,79 @@ function UserNavbar({ isOpen = true, onToggle }) {
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, type: null, chatId: null });
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Load chats from localStorage on mount
+  // Get user-specific storage key
+  const getChatStorageKey = () => {
+    const userId = localStorage.getItem('current_user_id');
+    return userId ? `chats_user_${userId}` : 'chats';
+  };
+
+  // Fetch chats from backend
+  const fetchChatsFromBackend = async () => {
+    try {
+      const response = await fetch('/api/chats', {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.chats) {
+          // Transform backend chats to match frontend format
+          const formattedChats = data.chats.map(chat => ({
+            id: `chat-${chat.id}`,
+            title: chat.user_message?.substring(0, 30) || 'Chat',
+            createdAt: chat.created_at,
+            messages: [
+              { id: chat.id * 2, text: chat.user_message, sender: 'user' },
+              { id: chat.id * 2 + 1, text: chat.model_response, sender: 'bot' }
+            ]
+          }));
+          
+          // Merge with localStorage chats (prioritize localStorage for newer chats)
+          const storageKey = getChatStorageKey();
+          const localChats = JSON.parse(localStorage.getItem(storageKey) || '[]');
+          
+          // Only add backend chats that don't exist in localStorage
+          const localChatIds = new Set(localChats.map(c => c.id));
+          const newChats = formattedChats.filter(c => !localChatIds.has(c.id));
+          
+          const mergedChats = [...localChats, ...newChats];
+          setChats(mergedChats);
+          localStorage.setItem(storageKey, JSON.stringify(mergedChats));
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch chats from backend:', error);
+    }
+  };
+
+  // Load chats from localStorage and backend on mount
   useEffect(() => {
-    const savedChats = localStorage.getItem('chats');
+    const storageKey = getChatStorageKey();
+    const savedChats = localStorage.getItem(storageKey);
     if (savedChats) {
       setChats(JSON.parse(savedChats));
     }
+    
+    // Fetch from backend to sync
+    fetchChatsFromBackend();
     setIsInitialized(true);
   }, []);
 
   // Save chats to localStorage whenever they change (but only after initial load)
   useEffect(() => {
     if (isInitialized) {
-      localStorage.setItem('chats', JSON.stringify(chats));
+      const storageKey = getChatStorageKey();
+      localStorage.setItem(storageKey, JSON.stringify(chats));
     }
   }, [chats, isInitialized]);
 
   // Listen for chat updates from other components
   useEffect(() => {
     const handleChatsUpdated = () => {
-      const savedChats = localStorage.getItem('chats');
+      const storageKey = getChatStorageKey();
+      const savedChats = localStorage.getItem(storageKey);
       if (savedChats) {
         setChats(JSON.parse(savedChats));
       }
