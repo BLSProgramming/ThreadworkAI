@@ -1,40 +1,34 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import Prism from 'prismjs';
-import 'prismjs/components/prism-python';
-import 'prismjs/themes/prism-tomorrow.css';
 import { HiLightningBolt } from '../assets/Icons';
 import Collapsible from '../Components/Collapsible';
 import { streamChat } from '../utils/streamChat';
 import ModelSelector from '../Components/ModelSelector';
+import { useContentRenderer } from '../hooks/useContentRenderer.jsx';
+import { useChatPersistence } from '../hooks/useChatPersistence.jsx';
+import { parseSynthesisNew, parseReasoningSections, MODEL_OPTIONS, MODEL_STYLES, INITIAL_MODELS_STATE } from '../utils/contentFormatting';
 
 function HomePage() {
+  // State
   const navigate = useNavigate();
   const { chatId } = useParams();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [selectedModels, setSelectedModels] = useState({
-    deepseek: true,
-    llama: true,
-    glm: true,
-    qwen: true,
-    essential: false,
-    moonshot: false,
-  });
+  const [selectedModels, setSelectedModels] = useState(INITIAL_MODELS_STATE);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Refs
   const messagesEndRef = useRef(null);
   const pendingChatRef = useRef(null);
   const isLoadingChatRef = useRef(false);
   const currentAbortRef = useRef(null);
 
-  const modelOptions = useMemo(() => [
-    { key: 'deepseek', label: 'DeepSeek', tags: ['Reasoning', 'Coding', 'Math', 'Long Context'] },
-    { key: 'llama', label: 'Llama', tags: ['Fast', 'General', 'Lightweight'] },
-    { key: 'glm', label: 'GLM-4.6', tags: ['Multilingual', 'Reasoning', 'Coding'] },
-    { key: 'qwen', label: 'Qwen', tags: ['Coding', 'Reasoning', 'Tools'] },
-    { key: 'essential', label: 'Essential', tags: ['Creative', 'Writing', 'General'] },
-    { key: 'moonshot', label: 'Moonshot', tags: ['Long Reasoning', 'Planning', 'Multilingual'] },
-  ], []);
+  // Hooks
+  const { renderFormattedContent } = useContentRenderer();
+  const { persistChats, saveChatToDatabase } = useChatPersistence();
+
+  // Constants
+  const modelOptions = useMemo(() => MODEL_OPTIONS, []);
 
   const lastBotId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -47,131 +41,25 @@ function HomePage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Inline CodeBlock component for copy UX per block with syntax highlighting
-  const CodeBlock = ({ code, lang = 'text' }) => {
-    const [copied, setCopied] = useState(false);
-    const timeoutRef = useRef(null);
-    const codeRef = useRef(null);
-
-    useEffect(() => {
-      if (codeRef.current) {
-        Prism.highlightElement(codeRef.current);
-      }
-      return () => clearTimeout(timeoutRef.current);
-    }, [code, lang]);
-
-    const handleCopy = async () => {
-      try {
-        await navigator.clipboard.writeText(code.trimEnd());
-        setCopied(true);
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = setTimeout(() => setCopied(false), 1800);
-      } catch (err) {
-        console.error('Copy failed', err);
-      }
-    };
-
-    const langDisplay = lang ? lang.toUpperCase() : 'TEXT';
-
-    return (
-      <div className="relative my-3 rounded-lg overflow-hidden border border-gray-800 shadow-md bg-gray-900">
-        <div className="flex items-center justify-between px-4 py-2.5 bg-gray-950 border-b border-gray-800">
-          <span className="text-xs font-semibold text-gray-400 tracking-wide uppercase">{langDisplay}</span>
-          <button
-            type="button"
-            onClick={handleCopy}
-            className={`px-3 py-1.5 text-[11px] font-semibold rounded border transition-all transform active:scale-95 ${
-              copied
-                ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm'
-                : 'bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700 hover:text-gray-100'
-            }`}
-          >
-            {copied ? '✓ Copied' : 'Copy'}
-          </button>
-        </div>
-        <pre className="p-4 overflow-x-auto text-sm bg-gray-900">
-          <code ref={codeRef} className={`language-${lang.toLowerCase()} text-gray-100`}>
-            {code.trimEnd()}
-          </code>
-        </pre>
-      </div>
-    );
-  };
-
-  // Parse synthesis output using === delimiters
-  const parseSynthesisNew = (text) => {
-    if (!text) {
-      return null;
-    }
-    
-    // Check for new format with === markers
-    const hasNewFormat = text.includes('===REASONING===') || text.includes('===ANSWER===');
-    
-    if (hasNewFormat) {
-      const reasoningMatch = text.match(/===REASONING===\s*([\s\S]*?)(?====ANSWER===|$)/i);
-      const answerMatch = text.match(/===ANSWER===\s*([\s\S]*?)(?====TIPS===|$)/i);
-      const tipsMatch = text.match(/===TIPS===\s*([\s\S]*?)$/i);
-      
-      return {
-        reasoning: reasoningMatch ? reasoningMatch[1].trim() : '',
-        answer: answerMatch ? answerMatch[1].trim() : '',
-        tips: tipsMatch ? tipsMatch[1].trim() : '',
-        format: 'new',
-      };
-    }
-    
-    return null;
-  };
-
-  // Parse reasoning into subsections for separate collapsible boxes
-  const parseReasoningSections = (text) => {
-    if (!text) {
-      return null;
-    }
-    
-    // Split by bold headers - be flexible with format variations
-    const consensusMatch = text.match(/\*\*Consensus\*\*[^•\n]*\n?([\s\S]*?)(?=\*\*Conflicts?\*\*|\*\*Checks?\*\*|$)/i);
-    const conflictsMatch = text.match(/\*\*Conflicts?\*\*[^•\n]*\n?([\s\S]*?)(?=\*\*Checks?\*\*|$)/i);
-    const checksMatch = text.match(/\*\*Checks?\*\*[^•\n]*\n?([\s\S]*?)$/i);
-    
-    const consensus = consensusMatch ? consensusMatch[1].trim() : '';
-    const conflicts = conflictsMatch ? conflictsMatch[1].trim() : '';
-    const checks = checksMatch ? checksMatch[1].trim() : '';
-    
-    // Only return if we found at least one section
-    if (!consensus && !conflicts && !checks) {
-      return null;
-    }
-    
-    return { consensus, conflicts, checks };
-  };
-
-  // Simple rendering for synthesis sections
+  // Synthesis rendering wrapper
   const renderSynthesis = (text) => {
     const sections = parseSynthesisNew(text);
     
     if (!sections) {
-      // Not synthesis format - render as plain content
       return renderFormattedContent(text);
     }
     
-    
-    // Parse reasoning into subsections
     const reasoningSubs = parseReasoningSections(sections.reasoning);
 
     return (
       <div className="space-y-4">
-        {/* Main Answer - Collapsible, open by default */}
+        {/* Answer */}
         {sections.answer && (
           <div className="bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-300 rounded-xl shadow-md overflow-hidden">
             <Collapsible
               defaultOpen={true}
               titleClassName="px-5 py-3 bg-gradient-to-r from-emerald-600 to-green-600 text-white font-bold text-lg"
-              title={
-                <span className="flex items-center gap-2">
-                  ✓ Answer
-                </span>
-              }
+              title={<span className="flex items-center gap-2">✓ Answer</span>}
               showCollapseButton={true}
               collapseButtonClassName="mt-2 bg-emerald-500 text-white hover:bg-emerald-400 rounded-lg"
             >
@@ -185,50 +73,20 @@ function HomePage() {
           </div>
         )}
         
-        {/* Tips - Collapsible, open by default */}
-        {sections.tips && (
-          <div className="bg-amber-50 border border-amber-300 rounded-lg shadow-sm overflow-hidden">
-            <Collapsible
-              defaultOpen={true}
-              titleClassName="px-4 py-2 bg-amber-100 text-amber-700 font-bold text-sm"
-              title={
-                <span className="flex items-center gap-2">
-                  💡 Tips
-                </span>
-              }
-              showCollapseButton={true}
-              collapseButtonClassName="mt-2 bg-amber-200 text-amber-700 hover:bg-amber-300 rounded-lg"
-            >
-              <div className="px-4 py-3 pr-14 space-y-2 text-gray-700 text-sm">
-                {renderFormattedContent(sections.tips, {
-                  headingClass: 'text-amber-700',
-                  bulletColor: 'text-amber-600',
-                })}
-              </div>
-            </Collapsible>
-          </div>
-        )}
-        
-        {/* Reasoning - Split into 2 collapsible boxes */}
+        {/* Model Agreement */}
         {reasoningSubs && (reasoningSubs.consensus || reasoningSubs.conflicts) && (
           <div className="bg-purple-50 border border-purple-200 rounded-lg shadow-sm overflow-hidden">
             <Collapsible
               defaultOpen={!reasoningSubs.conflicts}
               titleClassName="px-4 py-3 text-xs font-bold text-purple-700 uppercase tracking-wider"
-              title={
-                <span className="flex items-center gap-2">
-                  🤝 Model Agreement
-                </span>
-              }
+              title={<span className="flex items-center gap-2">🤝 Model Agreement</span>}
               showCollapseButton={true}
               collapseButtonClassName="mt-2 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg"
             >
               <div className="px-4 pb-4 pt-2 space-y-3 text-gray-700 text-sm">
                 {reasoningSubs.consensus && (
                   <div>
-                    <h4 className="font-bold text-purple-700 text-sm mb-2 flex items-center gap-1">
-                      ✓ Consensus
-                    </h4>
+                    <h4 className="font-bold text-purple-700 text-sm mb-2 flex items-center gap-1">✓ Consensus</h4>
                     <p className="text-xs text-purple-600 mb-2 italic">All models agreed on these points:</p>
                     {renderFormattedContent(reasoningSubs.consensus, {
                       headingClass: 'text-purple-700',
@@ -238,10 +96,8 @@ function HomePage() {
                 )}
                 {reasoningSubs.conflicts && (
                   <div className="mt-3 pt-3 border-t border-purple-200 bg-orange-50 -mx-4 -mb-4 px-4 py-3 rounded-b-lg">
-                    <h4 className="font-bold text-orange-700 text-sm mb-2 flex items-center gap-1">
-                      ⚡ Where Models Disagreed
-                    </h4>
-                    <p className="text-xs text-orange-600 mb-2 italic">Models had different opinions on these items. The choice below explains the reasoning:</p>
+                    <h4 className="font-bold text-orange-700 text-sm mb-2 flex items-center gap-1">⚡ Where Models Disagreed</h4>
+                    <p className="text-xs text-orange-600 mb-2 italic">Models had different opinions. The choice below explains the reasoning:</p>
                     {renderFormattedContent(reasoningSubs.conflicts, {
                       headingClass: 'text-orange-700',
                       bulletColor: 'text-orange-600',
@@ -253,21 +109,18 @@ function HomePage() {
           </div>
         )}
         
+        {/* Verification */}
         {reasoningSubs && reasoningSubs.checks && (
           <div className="bg-blue-50 border-2 border-blue-300 rounded-lg shadow-sm overflow-hidden">
             <Collapsible
               defaultOpen={true}
               titleClassName="px-4 py-3 text-xs font-bold text-blue-700 uppercase tracking-wider"
-              title={
-                <span className="flex items-center gap-2">
-                  🔍 How to Verify This Answer
-                </span>
-              }
+              title={<span className="flex items-center gap-2">🔍 How to Verify This Answer</span>}
               showCollapseButton={true}
               collapseButtonClassName="mt-2 bg-blue-200 text-blue-700 hover:bg-blue-300 rounded-lg"
             >
               <div className="px-4 pb-4 pt-2 space-y-3 text-gray-700 text-sm bg-white">
-                <p className="text-xs text-blue-600 italic mb-2">Use these checks to confirm the answer is correct before you start:</p>
+                <p className="text-xs text-blue-600 italic mb-2">Use these checks to confirm the answer is correct:</p>
                 {renderFormattedContent(reasoningSubs.checks, {
                   headingClass: 'text-blue-700',
                   bulletColor: 'text-blue-600',
@@ -277,17 +130,13 @@ function HomePage() {
           </div>
         )}
         
-        {/* Fallback if reasoning wasn't parsed into subsections */}
+        {/* Fallback reasoning */}
         {sections.reasoning && !reasoningSubs && (
           <div className="bg-purple-50 border border-purple-200 rounded-lg shadow-sm overflow-hidden">
             <Collapsible
               defaultOpen={false}
               titleClassName="px-4 py-3 text-xs font-bold text-purple-700 uppercase tracking-wider"
-              title={
-                <span className="flex items-center gap-2">
-                  🧠 How we got this answer
-                </span>
-              }
+              title={<span className="flex items-center gap-2">🧠 How we got this answer</span>}
               showCollapseButton={true}
               collapseButtonClassName="mt-2 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg"
             >
@@ -300,475 +149,28 @@ function HomePage() {
             </Collapsible>
           </div>
         )}
-      </div>
-    );
-  };
-
-  // Parse markdown tables into structured data
-  const parseMarkdownTable = (tableStr) => {
-    const lines = tableStr.trim().split('\n').map(l => l.trim());
-    if (lines.length < 3) return null;
-    
-    // Extract header
-    const headerLine = lines[0];
-    const separator = lines[1];
-    const dataLines = lines.slice(2);
-    
-    // Check if valid table (separator should contain dashes and pipes)
-    if (!separator.includes('-') || !separator.includes('|')) return null;
-    
-    const headers = headerLine.split('|').map(h => h.trim()).filter(h => h);
-    const rows = dataLines.map(line => 
-      line.split('|').map(cell => cell.trim()).filter(cell => cell)
-    ).filter(row => row.length === headers.length);
-    
-    return { headers, rows };
-  };
-
-  // Render markdown table as HTML
-  const renderTable = (tableStr) => {
-    const table = parseMarkdownTable(tableStr);
-    if (!table) return <p className="text-sm text-gray-600">{tableStr}</p>;
-    
-    return (
-      <div className="overflow-x-auto my-4 rounded-lg border border-gray-300">
-        <table className="w-full text-sm border-collapse bg-white">
-          <thead className="bg-gray-100 border-b-2 border-gray-300">
-            <tr>
-              {table.headers.map((h, i) => (
-                <th key={i} className="px-3 py-2 text-left font-semibold text-gray-700 border-r last:border-r-0">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {table.rows.map((row, ri) => (
-              <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-gray-50 border-b border-gray-200'}>
-                {row.map((cell, ci) => (
-                  <td key={ci} className="px-3 py-2 text-gray-700 border-r last:border-r-0 border-gray-200">
-                    {cell}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
-
-  // Render text with headings, lists, inline bold, links, YouTube embeds, tables, and fenced code blocks
-  const renderFormattedContent = (text, { headingClass = 'text-indigo-700', bulletColor = 'text-indigo-600' } = {}) => {
-    if (!text) return null;
-
-    // Split text by tables first (markdown table pattern)
-    const tablePattern = /(\n\|[^\n]+\|[^\n]*(?:\n\|[-\s|:]+\|[^\n]*)+(?:\n\|[^\n]+\|[^\n]*)*)/g;
-    const parts = text.split(tablePattern);
-    
-    return (
-      <div>
-        {parts.map((part, partIdx) => {
-          // Check if this part is a table
-          if (tablePattern.test(part)) {
-            return <div key={partIdx}>{renderTable(part)}</div>;
-          }
-          
-          // Otherwise, process as regular formatted content
-          return (
-            <div key={partIdx}>
-              {renderRegularContent(part, { headingClass, bulletColor })}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  // Render regular (non-table) formatted content
-  const renderRegularContent = (text, { headingClass = 'text-indigo-700', bulletColor = 'text-indigo-600' } = {}) => {
-    if (!text || text.trim().length === 0) return null;
-
-    const extractYouTubeId = (url) => {
-      const patterns = [
-        /(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})/,
-        /youtube\.com\/embed\/([\w-]{11})/,
-      ];
-      for (const pattern of patterns) {
-        const match = url.match(pattern);
-        if (match) return match[1];
-      }
-      return null;
-    };
-
-    const renderInlineBold = (str) => {
-      const parts = str.split(/(\*\*[^*]+\*\*)/g);
-      return parts.map((part, i) => {
-        if (part.startsWith('**') && part.endsWith('**')) {
-          return <strong key={`bold-${i}`}>{part.slice(2, -2)}</strong>;
-        }
-        return part;
-      });
-    };
-
-    const renderTextWithLinks = (str) => {
-      // First handle markdown links [text](url)
-      const markdownLinkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
-      const withMarkdownLinks = [];
-      let lastIdx = 0;
-      let mdMatch;
-      
-      while ((mdMatch = markdownLinkRegex.exec(str)) !== null) {
-        const [fullMatch, linkText, url] = mdMatch;
-        const before = str.slice(lastIdx, mdMatch.index);
-        if (before) {
-          withMarkdownLinks.push({ type: 'text', content: before });
-        }
-        withMarkdownLinks.push({ type: 'mdlink', text: linkText, url });
-        lastIdx = mdMatch.index + fullMatch.length;
-      }
-      const remaining = str.slice(lastIdx);
-      if (remaining) {
-        withMarkdownLinks.push({ type: 'text', content: remaining });
-      }
-      
-      // If no markdown links found, treat entire string as text
-      if (withMarkdownLinks.length === 0) {
-        withMarkdownLinks.push({ type: 'text', content: str });
-      }
-      
-      // Now handle plain URLs in text segments
-      const result = [];
-      withMarkdownLinks.forEach((item, itemIdx) => {
-        if (item.type === 'mdlink') {
-          result.push(
-            <a
-              key={`mdlink-${itemIdx}`}
-              href={item.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 underline hover:text-blue-800"
+        
+        {/* Tips */}
+        {sections.tips && (
+          <div className="bg-amber-50 border border-amber-300 rounded-lg shadow-sm overflow-hidden">
+            <Collapsible
+              defaultOpen={true}
+              titleClassName="px-4 py-2 bg-amber-100 text-amber-700 font-bold text-sm"
+              title={<span className="flex items-center gap-2">💡 Tips</span>}
+              showCollapseButton={true}
+              collapseButtonClassName="mt-2 bg-amber-200 text-amber-700 hover:bg-amber-300 rounded-lg"
             >
-              {item.text}
-            </a>
-          );
-        } else {
-          // Handle plain URLs in text
-          const urlRegex = /(https?:\/\/[^\s]+)/g;
-          const parts = item.content.split(urlRegex);
-          parts.forEach((part, i) => {
-            if (urlRegex.test(part)) {
-              result.push(
-                <a
-                  key={`link-${itemIdx}-${i}`}
-                  href={part}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 underline hover:text-blue-800"
-                >
-                  {part}
-                </a>
-              );
-            } else {
-              result.push(<span key={`text-${itemIdx}-${i}`}>{renderInlineBold(part)}</span>);
-            }
-          });
-        }
-      });
-      
-      return result;
-    };
-
-    const renderLines = (block, blockIndex) => {
-      const lines = block.split('\n');
-      return lines.map((line, idx) => {
-        const key = `${blockIndex}-${idx}`;
-        const trimmed = line.trim();
-        if (!trimmed) return <div key={key} className="h-2" />;
-
-        // Horizontal rule
-        if (/^-{3,}$/.test(trimmed)) {
-          return <hr key={key} className="my-4 border-t-2 border-gray-300" />;
-        }
-
-        // Bold section header: **Header:** or **Header**
-        const boldHeaderMatch = trimmed.match(/^\*\*([^*:]+):?\*\*:?\s*(.*)$/);
-        if (boldHeaderMatch) {
-          const headerText = boldHeaderMatch[1].trim();
-          const restText = boldHeaderMatch[2].trim();
-          
-          // Special icons for known headers
-          let icon = '';
-          if (/consensus/i.test(headerText)) icon = '✓ ';
-          else if (/conflict/i.test(headerText)) icon = '⚡ ';
-          else if (/check/i.test(headerText)) icon = '🔍 ';
-          
-          return (
-            <div key={key} className="mt-3 mb-1">
-              <h4 className={`font-bold ${headingClass} text-sm inline`}>
-                {icon}{headerText}
-              </h4>
-              {restText && <span className="text-sm text-gray-800 ml-1">{restText}</span>}
-            </div>
-          );
-        }
-
-        const subheaderMatch = trimmed.match(/^\*([^*]+)\*$/);
-        if (subheaderMatch) {
-          return (
-            <h4 key={key} className={`font-bold ${headingClass} text-sm mt-3 mb-1`}>
-              {subheaderMatch[1]}
-            </h4>
-          );
-        }
-
-        if (/^#{1,3}\s/.test(trimmed) || /^[A-Z][A-Za-z\s\-‑]+:$/.test(trimmed) || /^[A-Z][A-Za-z\s\-‑]+\s*\([^)]+\)$/.test(trimmed)) {
-          const headerText = trimmed.replace(/^#+\s*/, '').replace(/:$/, '');
-          
-          // Special styling for Equipment and Tips sections
-          if (/^(Equipment|Tips|Notes\s*&\s*Tips)$/i.test(headerText)) {
-            return (
-              <div key={key} className="mt-4 mb-2 px-3 py-2 bg-blue-50 border-l-4 border-blue-400 rounded">
-                <h3 className={`font-bold text-blue-700 text-sm uppercase tracking-wide`}>
-                  {headerText === 'Equipment' ? '🔧 ' : '💡 '}{headerText}
-                </h3>
+              <div className="px-4 py-3 pr-14 space-y-2 text-gray-700 text-sm">
+                {renderFormattedContent(sections.tips, {
+                  headingClass: 'text-amber-700',
+                  bulletColor: 'text-amber-600',
+                })}
               </div>
-            );
-          }
-          
-          return (
-            <h3 key={key} className={`font-bold ${headingClass} text-sm mt-4 mb-2 uppercase tracking-wide`}>
-              {headerText}
-            </h3>
-          );
-        }
-
-        const numberedBoldMatch = trimmed.match(/^(\d+)\.?\s*\*\*([^*]+)\*\*:?:?\s*(.*)$/);
-        if (numberedBoldMatch) {
-          return (
-            <div key={key} className="ml-4 my-1 text-sm text-gray-800 flex">
-              <span className={`font-bold ${headingClass} mr-2 min-w-[1.5rem]`}>{numberedBoldMatch[1]}.</span>
-              <span>
-                <strong className="text-gray-900">{numberedBoldMatch[2]}</strong>
-                {numberedBoldMatch[3] ? `: ${numberedBoldMatch[3]}` : ''}
-              </span>
-            </div>
-          );
-        }
-
-        const numberedLabelMatch = trimmed.match(/^(\d+)\.\s*([A-Za-z][A-Za-z\s\-‑]+):\s*(.+)$/);
-        if (numberedLabelMatch) {
-          return (
-            <div key={key} className="ml-4 my-1 text-sm text-gray-800 flex">
-              <span className={`font-bold ${headingClass} mr-2 min-w-[1.5rem]`}>{numberedLabelMatch[1]}.</span>
-              <span>
-                <strong className="text-gray-900">{numberedLabelMatch[2]}</strong>: {numberedLabelMatch[3]}
-              </span>
-            </div>
-          );
-        }
-
-        const numberedMatch = trimmed.match(/^(\d+)\.\s*(.+)$/);
-        if (numberedMatch) {
-          return (
-            <div key={key} className="ml-4 my-1 text-sm text-gray-800 flex">
-              <span className={`font-bold ${headingClass} mr-2 min-w-[1.5rem]`}>{numberedMatch[1]}.</span>
-              <span>{renderInlineBold(numberedMatch[2])}</span>
-            </div>
-          );
-        }
-
-        const bulletMatch = trimmed.match(/^[\-•\*]\s+(.+)$/);
-        if (bulletMatch) {
-          return (
-            <div key={key} className="ml-4 my-1 text-sm text-gray-800 flex gap-2">
-              <span className={`${bulletColor} font-bold`}>•</span>
-              <span>{renderTextWithLinks(bulletMatch[1])}</span>
-            </div>
-          );
-        }
-
-        return (
-          <p key={key} className="text-sm leading-relaxed text-gray-800 mb-2">
-            {renderTextWithLinks(trimmed)}
-          </p>
-        );
-      });
-    };
-
-    const renderCodeBlock = (code, lang = 'text', key) => <CodeBlock key={key} code={code} lang={lang} />;
-
-    const renderYouTubeEmbed = (url, key) => {
-      const videoId = extractYouTubeId(url);
-      if (!videoId) return null;
-      return (
-        <div key={key} className="my-4 rounded-lg overflow-hidden border border-gray-300">
-          <iframe
-            width="100%"
-            height="315"
-            src={`https://www.youtube.com/embed/${videoId}`}
-            title="YouTube video player"
-            frameBorder="0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            className="w-full"
-          />
-        </div>
-      );
-    };
-
-    const segments = [];
-    const codeRegex = /```(\w+)?\n([\s\S]*?)```/g;
-    const youtubeRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11}))/g;
-    let lastIndex = 0;
-    let match;
-
-    // First pass: extract code blocks
-    const tempSegments = [];
-    while ((match = codeRegex.exec(text)) !== null) {
-      const [fullMatch, lang, code] = match;
-      const before = text.slice(lastIndex, match.index);
-      if (before.trim()) {
-        tempSegments.push({ type: 'text', content: before });
-      }
-      tempSegments.push({ type: 'code', content: code, lang: lang || 'text' });
-      lastIndex = match.index + fullMatch.length;
-    }
-    const after = text.slice(lastIndex);
-    if (after.trim()) {
-      tempSegments.push({ type: 'text', content: after });
-    }
-
-    // Second pass: extract YouTube links from text segments but keep them in text too
-    const ytUrlsGlobal = new Set();
-    tempSegments.forEach((segment) => {
-      if (segment.type === 'text') {
-        let segmentText = segment.content;
-        let ytMatch;
-        youtubeRegex.lastIndex = 0;
-        while ((ytMatch = youtubeRegex.exec(segmentText)) !== null) {
-          ytUrlsGlobal.add(ytMatch[0]);
-        }
-        // Keep the text segment intact (with URLs as clickable links)
-        segments.push({ type: 'text', content: segmentText });
-      } else {
-        segments.push(segment);
-      }
-    });
-    
-    // Add all YouTube embeds at the end to avoid duplicates
-    ytUrlsGlobal.forEach((url) => {
-      segments.push({ type: 'youtube', url });
-    });
-
-    return segments.map((segment, idx) => {
-      if (segment.type === 'code') {
-        return renderCodeBlock(segment.content, segment.lang, `code-${idx}`);
-      }
-      if (segment.type === 'youtube') {
-        return renderYouTubeEmbed(segment.url, `youtube-${idx}`);
-      }
-      return <div key={`text-${idx}`}>{renderLines(segment.content, idx)}</div>;
-    });
-  };
-
-  const persistTimerRef = useRef(null);
-  const pendingPersistRef = useRef(null);
-
-  // Batch localStorage writes to reduce churn during streaming updates
-  const persistChats = (updater) => {
-    const chats = JSON.parse(localStorage.getItem('chats') || '[]');
-    const updated = updater(chats);
-    pendingPersistRef.current = updated;
-
-    if (!persistTimerRef.current) {
-      persistTimerRef.current = setTimeout(() => {
-        const payload = pendingPersistRef.current;
-        if (payload) {
-          localStorage.setItem('chats', JSON.stringify(payload));
-          setTimeout(() => window.dispatchEvent(new Event('chats-updated')), 0);
-        }
-        pendingPersistRef.current = null;
-        persistTimerRef.current = null;
-      }, 60);
-    }
-
-    return updated;
-  };
-
-  // Helper function to format chat data for PostgreSQL storage
-  const formatChatForDatabase = (chatId, title, messages) => {
-    return {
-      chat_id: chatId,
-      title: title,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      messages: messages.map(msg => {
-        if (msg.sender === 'user') {
-          return {
-            message_id: msg.id.toString(),
-            sender: 'user',
-            user_prompt: msg.text,
-            created_at: new Date().toISOString()
-          };
-        } else {
-          // Convert allResponses object to array and map to model1-4
-          const responses = msg.allResponses ? Object.values(msg.allResponses) : [];
-          const modelNames = msg.allResponses ? Object.keys(msg.allResponses) : [];
-          
-          return {
-            message_id: msg.id.toString(),
-            sender: 'bot',
-            user_prompt: null,
-            synthesized_response: msg.text,
-            model1_name: modelNames[0] || null,
-            model1_response: responses[0] || null,
-            model2_name: modelNames[1] || null,
-            model2_response: responses[1] || null,
-            model3_name: modelNames[2] || null,
-            model3_response: responses[2] || null,
-            model4_name: modelNames[3] || null,
-            model4_response: responses[3] || null,
-            created_at: new Date().toISOString()
-          };
-        }
-      })
-    };
-  };
-
-  // Function to save chat to database (ready for backend integration)
-  const saveChatToDatabase = async (chatId) => {
-    const chats = JSON.parse(localStorage.getItem('chats') || '[]');
-    const chat = chats.find(c => c.id === chatId);
-    
-    if (!chat) return;
-
-    const dbPayload = formatChatForDatabase(chat.id, chat.title, chat.messages);
-    
-    // Store formatted data in localStorage for now (ready for API call)
-    const dbChats = JSON.parse(localStorage.getItem('dbChats') || '[]');
-    const existingIndex = dbChats.findIndex(c => c.chat_id === chatId);
-    
-    if (existingIndex !== -1) {
-      dbChats[existingIndex] = dbPayload;
-    } else {
-      dbChats.push(dbPayload);
-    }
-    
-    localStorage.setItem('dbChats', JSON.stringify(dbChats));
-    
-    // When backend is ready, uncomment this:
-    /*
-    try {
-      await fetch('/api/chats/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dbPayload)
-      });
-    } catch (error) {
-      console.error('Failed to save chat to database:', error);
-    }
-    */
+            </Collapsible>
+          </div>
+        )}
+      </div>
+    );
   };
 
   useEffect(() => {
@@ -1183,48 +585,12 @@ function HomePage() {
                       {message.allResponses && Object.keys(message.allResponses || {}).length > 0 && (
                         <div className="flex-[0.75] max-w-xl space-y-4">
                           {[
-                            {
-                              key: 'deepseek',
-                              title: 'DeepSeek',
-                              container: 'bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200',
-                              heading: 'text-blue-700',
-                              collapse: 'bg-blue-50 text-blue-700 hover:bg-blue-100',
-                            },
-                            {
-                              key: 'llama',
-                              title: 'Llama',
-                              container: 'bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200',
-                              heading: 'text-purple-700',
-                              collapse: 'bg-purple-50 text-purple-700 hover:bg-purple-100',
-                            },
-                            {
-                              key: 'glm',
-                              title: 'GLM-4.6',
-                              container: 'bg-gradient-to-br from-cyan-50 to-cyan-100 border border-cyan-200',
-                              heading: 'text-cyan-700',
-                              collapse: 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100',
-                            },
-                            {
-                              key: 'qwen',
-                              title: 'Qwen',
-                              container: 'bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200',
-                              heading: 'text-emerald-700',
-                              collapse: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
-                            },
-                            {
-                              key: 'essential',
-                              title: 'Essential',
-                              container: 'bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200',
-                              heading: 'text-orange-700',
-                              collapse: 'bg-orange-50 text-orange-700 hover:bg-orange-100',
-                            },
-                            {
-                              key: 'moonshot',
-                              title: 'Moonshot',
-                              container: 'bg-gradient-to-br from-pink-50 to-pink-100 border border-pink-200',
-                              heading: 'text-pink-700',
-                              collapse: 'bg-pink-50 text-pink-700 hover:bg-pink-100',
-                            },
+                            MODEL_STYLES.deepseek,
+                            MODEL_STYLES.llama,
+                            MODEL_STYLES.glm,
+                            MODEL_STYLES.qwen,
+                            MODEL_STYLES.essential,
+                            MODEL_STYLES.moonshot,
                           ]
                             .filter((item) => message.allResponses[item.key])
                             .map((item) => (
