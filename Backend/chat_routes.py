@@ -341,7 +341,7 @@ RULES:
                                 VALUES (%(user_id)s, %(user_message)s, %(model_response)s)
                                 """, {
                         'user_id': user_id,
-                        'user_message': user_message,
+                        'user_message': user_message.split("English")[0].strip(),
                         'model_response': synthesis_response
                     })
 
