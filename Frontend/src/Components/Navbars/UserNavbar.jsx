@@ -35,7 +35,7 @@ function UserNavbar({ isOpen = true, onToggle }) {
           // Transform backend chats to match frontend format
           const formattedChats = data.chats.map(chat => ({
             id: `chat-${chat.id}`,
-            title: chat.user_message?.substring(0, 30) || 'Chat',
+            title: chat.chat_name || chat.user_message?.substring(0, 30) || 'Chat',
             createdAt: chat.created_at,
             messages: [
               { id: chat.id * 2, text: chat.user_message, sender: 'user' },
