@@ -6,8 +6,40 @@ from dotenv import load_dotenv
 import concurrent.futures
 import json
 import time
+import re
 
 load_dotenv()
+
+
+def strip_repetition(text, min_repeat_len=20):
+    """
+    Detect and remove repetitive content from model output.
+    If the same sentence/paragraph is repeated multiple times, keep only the first occurrence.
+    """
+    if not text or len(text) < min_repeat_len * 2:
+        return text
+
+    # Split into sentences and detect repeats
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    if len(sentences) <= 2:
+        return text
+
+    seen = set()
+    unique_sentences = []
+    repeat_count = 0
+    for s in sentences:
+        normalized = s.strip().lower()
+        if normalized in seen:
+            repeat_count += 1
+        else:
+            seen.add(normalized)
+            unique_sentences.append(s)
+
+    # If more than half the sentences were repeats, it's a repetition loop
+    if repeat_count > len(sentences) * 0.3:
+        return ' '.join(unique_sentences)
+
+    return text
 
 chat_routes = Blueprint('chat', __name__)
 
@@ -319,18 +351,24 @@ RULES:
 
                 try:
                     start_time = time.time()
-                    completion = client.chat.completions.create(
-                        model="openai/gpt-oss-20b:novita",
-                        messages=[
+                    synthesis_kwargs = {
+                        "model": "openai/gpt-oss-20b:novita",
+                        "messages": [
                             {
                                 "role": "user",
                                 "content": synthesis_prompt
                             }
                         ],
-                        timeout=90,
-                    )
+                        "timeout": 90,
+                        "frequency_penalty": 1.2,
+                    }
+                    if is_simple_question:
+                        synthesis_kwargs["max_tokens"] = 300
+                    else:
+                        synthesis_kwargs["max_tokens"] = 2048
+                    completion = client.chat.completions.create(**synthesis_kwargs)
                     elapsed = time.time() - start_time
-                    synthesis_response = completion.choices[0].message.content
+                    synthesis_response = strip_repetition(completion.choices[0].message.content)
 
                     # user_id = session['user_id']
                     connection = get_db_connection()

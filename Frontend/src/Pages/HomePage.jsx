@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { HiLightningBolt } from '../assets/Icons';
 import Collapsible from '../Components/Collapsible';
 import { streamChat } from '../utils/streamChat';
@@ -11,6 +11,7 @@ import { parseSynthesisNew, parseReasoningSections, MODEL_OPTIONS, MODEL_STYLES,
 function HomePage() {
   // State
   const { chatId } = useParams();
+  const navigate = useNavigate();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [selectedModels, setSelectedModels] = useState(INITIAL_MODELS_STATE);
@@ -171,15 +172,19 @@ function HomePage() {
   useEffect(() => {
     isLoadingChatRef.current = true;
     if (chatId) {
-      const storageKey = getChatStorageKey();
-      const chats = JSON.parse(localStorage.getItem(storageKey) || '[]');
-      const currentChat = chats.find((chat) => chat.id === chatId);
-      if (currentChat && currentChat.messages) {
-        setMessages(currentChat.messages);
+      // If this is a new chat we just created, messages are already set by handleSendMessage
+      if (pendingChatRef.current && pendingChatRef.current.id === chatId) {
+        // Don't overwrite — stream is in progress
       } else {
-        setMessages([]);
+        const storageKey = getChatStorageKey();
+        const chats = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        const currentChat = chats.find((chat) => chat.id === chatId);
+        if (currentChat && currentChat.messages) {
+          setMessages(currentChat.messages);
+        } else {
+          setMessages([]);
+        }
       }
-
     } else {
       setMessages([]);
     }
@@ -313,6 +318,11 @@ function HomePage() {
       };
       chats.unshift(newChat);
       localStorage.setItem(storageKey, JSON.stringify(chats));
+
+      // Show user message immediately and navigate to the new chat
+      setMessages(nextMessages);
+      navigate(`/chat/${newChatId}`, { replace: true });
+
       setTimeout(() => {
         window.dispatchEvent(new Event('chats-updated'));
       }, 0);

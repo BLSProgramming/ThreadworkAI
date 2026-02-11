@@ -212,7 +212,7 @@ function UserNavbar({ isOpen = true, onToggle }) {
         )}
 
         {/* Chat History */}
-        <div className={`flex-1 overflow-y-auto px-3 py-4 space-y-2 ${isOpen ? '' : 'opacity-0'}`}>
+        <div className={`flex-1 overflow-y-auto px-3 py-4 space-y-2 sidebar-scroll ${isOpen ? '' : 'opacity-0'}`}>
           {chats.length === 0 ? (
             <p className="text-gray-400 text-sm text-center py-8">No chats yet</p>
           ) : (
