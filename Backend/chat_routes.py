@@ -408,7 +408,6 @@ def chat_history():
             })
 
     chats = cursor.fetchall()
-
     cursor.close()
     connection.close()
 
