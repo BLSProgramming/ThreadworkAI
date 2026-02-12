@@ -1,28 +1,16 @@
-import { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { HiLightningBolt } from 'react-icons/hi';
 import { FiGrid, FiZap, FiShield } from 'react-icons/fi';
-import { AiOutlineLoading3Quarters } from 'react-icons/ai';
-import { IoClose } from 'react-icons/io5';
 import Navbar from '../Components/Navbar';
+import TrialChat from '../Components/TrialChat';
 
 function LandingPage() {
-  const navigate = useNavigate();
   const [trialInput, setTrialInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [showTrialChat, setShowTrialChat] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [messages, setMessages] = useState([]);
-  const messagesEndRef = useRef(null);
+  const [initialQuestion, setInitialQuestion] = useState('');
   const howItWorksRef = useRef(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
 
   const scrollToHowItWorks = (e) => {
     e.preventDefault();
@@ -54,7 +42,8 @@ function LandingPage() {
     requestAnimationFrame(animation);
   };
 
-  const openChat = () => {
+  const openChat = (question) => {
+    setInitialQuestion(question);
     setIsTransitioning(true);
     setTimeout(() => {
       setShowTrialChat(true);
@@ -65,86 +54,16 @@ function LandingPage() {
     setIsTransitioning(false);
     setTimeout(() => {
       setShowTrialChat(false);
-      setMessages([]);
-      setTrialInput('');
+      setInitialQuestion('');
     }, 500);
   };
 
-  const handleTrialSubmit = async (e) => {
+  const handleTrialSubmit = (e) => {
     e.preventDefault();
     if (!trialInput.trim()) return;
-    
-    const userMessage = trialInput;
-    openChat();
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    const question = trialInput;
     setTrialInput('');
-    setIsLoading(true);
-    
-    try {
-      const response = await fetch('/api/trial-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: userMessage
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.responses && Array.isArray(data.responses)) {
-          const modelResponses = {};
-          data.responses.forEach((resp) => {
-            modelResponses[resp.model] = resp.response;
-          });
-          const synthesized = modelResponses['GPT-OSS'] || 'No synthesis available';
-          setMessages(prev => [...prev, { role: 'assistant', content: synthesized }]);
-        }
-      } else {
-        setMessages(prev => [...prev, { role: 'assistant', content: 'Something went wrong. Please try again.' }]);
-      }
-    } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Network error. Please try again.' }]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleChatSubmit = async (e) => {
-    e.preventDefault();
-    if (!trialInput.trim()) return;
-    
-    const userMessage = trialInput;
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
-    setTrialInput('');
-    setIsLoading(true);
-    
-    try {
-      const response = await fetch('/api/trial-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: userMessage
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.responses && Array.isArray(data.responses)) {
-          const modelResponses = {};
-          data.responses.forEach((resp) => {
-            modelResponses[resp.model] = resp.response;
-          });
-          const synthesized = modelResponses['GPT-OSS'] || 'No synthesis available';
-          setMessages(prev => [...prev, { role: 'assistant', content: synthesized }]);
-        }
-      } else {
-        setMessages(prev => [...prev, { role: 'assistant', content: 'Something went wrong. Please try again.' }]);
-      }
-    } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Network error. Please try again.' }]);
-    } finally {
-      setIsLoading(false);
-    }
+    openChat(question);
   };
 
   return (
@@ -209,11 +128,10 @@ function LandingPage() {
                     onChange={(e) => setTrialInput(e.target.value)}
                     placeholder="Try it now — ask anything..."
                     className="flex-1 bg-transparent px-4 py-3 text-gray-900 placeholder:text-gray-400 outline-none text-lg"
-                    disabled={isLoading}
                   />
                   <button
                     type="submit"
-                    disabled={isLoading || !trialInput.trim()}
+                    disabled={!trialInput.trim()}
                     className="px-6 py-3 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl font-semibold hover:from-violet-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2"
                   >
                     <HiLightningBolt className="w-5 h-5" />
@@ -450,120 +368,13 @@ function LandingPage() {
       </footer>
       </div>
 
-      {/* Chat Overlay - Slides in from right */}
+      {/* Trial Chat Overlay */}
       <div className={`fixed inset-0 z-50 transition-transform duration-500 ease-in-out ${
         showTrialChat && isTransitioning ? 'translate-x-0' : 'translate-x-full'
       }`}>
-        <div className="min-h-screen bg-white flex flex-col">
-          {/* Chat Navigation */}
-          <nav className="bg-white border-b border-gray-300">
-            <div className="max-w-7xl mx-auto px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
-                    <HiLightningBolt className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="text-xl font-bold text-gray-900">Threadwork AI</span>
-                  <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full font-medium">2 Models</span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={closeChat}
-                    className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors font-medium"
-                  >
-                    <IoClose className="w-5 h-5" />
-                    Close
-                  </button>
-                  <Link 
-                    to="/signup" 
-                    className="px-5 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl font-semibold hover:from-violet-500 hover:to-purple-500 transition-all duration-200 shadow-lg shadow-purple-500/25"
-                  >
-                    Sign Up for Full Access
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </nav>
-
-          {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto px-6 py-8 bg-gray-50">
-            <div className="max-w-3xl mx-auto space-y-6">
-              {messages.map((msg, idx) => (
-                <div key={idx} className={`flex items-start gap-3 animate-fadeIn ${msg.role === 'user' ? 'justify-end' : ''}`}>
-                  {msg.role === 'assistant' && (
-                    <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <HiLightningBolt className="w-4 h-4 text-white" />
-                    </div>
-                  )}
-                  <div className={`rounded-2xl px-4 py-3 max-w-2xl ${
-                    msg.role === 'user' 
-                      ? 'bg-purple-600 text-white rounded-tr-md' 
-                      : 'bg-white border border-gray-300 text-gray-900 rounded-tl-md'
-                  }`}>
-                    {msg.role === 'assistant' && (
-                      <p className="text-sm text-purple-600 mb-2 font-medium">Threadwork</p>
-                    )}
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                  </div>
-                  {msg.role === 'user' && (
-                    <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <span className="text-white text-sm font-bold">You</span>
-                    </div>
-                  )}
-                </div>
-              ))}
-              
-              {isLoading && (
-                <div className="flex items-start gap-3 animate-fadeIn">
-                  <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <HiLightningBolt className="w-4 h-4 text-white" />
-                  </div>
-                  <div className="bg-white border border-gray-300 rounded-2xl rounded-tl-md px-4 py-3 text-gray-600">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-purple-600 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                      <span className="ml-2">Consulting AI Models...</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-          </div>
-
-          {/* Chat Input */}
-          <div className="bg-white border-t border-gray-300 px-6 py-4">
-            <div className="max-w-3xl mx-auto">
-              <form onSubmit={handleChatSubmit} className="relative">
-                <div className="flex items-center bg-white border-2 border-gray-300 rounded-2xl p-2 focus-within:border-purple-500 focus-within:bg-gray-50 transition-all duration-200">
-                  <input
-                    type="text"
-                    value={trialInput}
-                    onChange={(e) => setTrialInput(e.target.value)}
-                    placeholder="Ask another question..."
-                    className="flex-1 bg-transparent px-4 py-3 text-gray-900 placeholder:text-gray-400 outline-none text-lg"
-                    disabled={isLoading}
-                  />
-                  <button
-                    type="submit"
-                    disabled={isLoading || !trialInput.trim()}
-                    className="px-6 py-3 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl font-semibold hover:from-violet-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2"
-                  >
-                    {isLoading ? (
-                      <AiOutlineLoading3Quarters className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <HiLightningBolt className="w-5 h-5" />
-                    )}
-                  </button>
-                </div>
-              </form>
-              <p className="text-center text-gray-600 text-sm mt-3">
-                Trial is limited to 2 models • <Link to="/signup" className="text-purple-600 hover:text-purple-700 font-medium">Sign up</Link> for all models & saved chats
-              </p>
-            </div>
-          </div>
-        </div>
+        {showTrialChat && (
+          <TrialChat onClose={closeChat} initialQuestion={initialQuestion} />
+        )}
       </div>
     </div>
   );
