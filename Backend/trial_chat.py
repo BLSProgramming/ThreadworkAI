@@ -1,163 +1,242 @@
-from flask import Blueprint, request, jsonify, session
-from db_connection import get_db_connection
+from flask import Blueprint, request, jsonify, Response
+import os
 from openai import OpenAI
 from dotenv import load_dotenv
-import os
+import concurrent.futures
+import json
+import time
+import re
 
 load_dotenv()
 
-trial_chat = Blueprint('trial_chat_route', __name__)
+trial_chat_routes = Blueprint('trials', __name__)
 
-# Client used to send chat messages to different models
+def strip_repetition(text, min_repeat_len=20):
+    if not text or len(text) < min_repeat_len * 2:
+        return text
+
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    if len(sentences) <= 2:
+        return text
+
+    seen = set()
+    unique = []
+    repeats = 0
+
+    for s in sentences:
+        norm = s.strip().lower()
+        if norm in seen:
+            repeats += 1
+        else:
+            seen.add(norm)
+            unique.append(s)
+
+    if repeats > len(sentences) * 0.3:
+        return " ".join(unique)
+
+    return text
+
+
+# -------------------------
+# OpenAI client via HF router
+# -------------------------
 client = OpenAI(
-    base_url="https://router.huggingface.co/v1",  # Points to Hugging Face's OpenAI-compatible API router
-    api_key=os.getenv("HF_TOKEN"),
+    base_url="https://router.huggingface.co/v1",
+    api_key=os.environ.get("HF_TOKEN"),
 )
 
+# -------------------------
+# Model configuration
+# -------------------------
+MODEL_CONFIGS = {
+    "deepseek": {
+        "label": "DeepSeek",
+        "hf_model": "deepseek-ai/DeepSeek-V3.2:novita",
+    },
+    "llama": {
+        "label": "Llama",
+        "hf_model": "meta-llama/Llama-3.1-8B-Instruct:novita",
+    },
+}
 
-@trial_chat.route('/api/trial-chat', methods=['POST'])
-def trial_chat_route():
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
+VALID_MODELS = set(MODEL_CONFIGS.keys())
+
+
+# -------------------------
+# API Route
+# -------------------------
+@trial_chat_routes.route("/api/trial-chat", methods=["POST"])
+def trial_chat():
     try:
-        data = request.json
-        user_message = data.get('message', '').strip()
-        selected_models = data.get('models') or ['llama', 'qwen']
+        data = request.json or {}
 
-        if not user_message:
+        base_message = data.get("message", "").strip()
+        if not base_message:
             return jsonify({"error": "Message cannot be empty"}), 400
 
+        user_message = base_message + "\n\nRespond in English only."
+
+        selected_models = data.get("models", list(VALID_MODELS))
+        selected_models = [m for m in selected_models if m in VALID_MODELS][:4]
+
         if not selected_models:
-            return jsonify({"error": "At least one model must be selected"}), 400
+            return jsonify({"error": "No valid models selected"}), 400
 
-        responses = []
-        available_responses = []
+        enable_synthesis = data.get("synthesize", True)
+        min_for_synthesis = max(1, int(data.get("min_for_synthesis", 2)))
 
-        model_configs = {
-            "llama": {
-                "label": "Llama",
-                "hf_model": "meta-llama/Llama-3.1-8B-Instruct:novita",
-            },
-            "qwen": {
-                "label": "Qwen",
-                "hf_model": "Qwen/Qwen3-Coder-30B-A3B-Instruct:nebius",
-            },
-        }
+        # -------------------------
+        # Model invocation
+        # -------------------------
+        def invoke_model(cfg):
+            def call_once():
+                start = time.time()
+                completion = client.chat.completions.create(
+                    model=cfg["hf_model"],
+                    messages=[{"role": "user", "content": user_message}],
+                    timeout=90,
+                )
+                text = completion.choices[0].message.content
+                if not text or not text.strip():
+                    raise ValueError("Empty response")
+                return text, time.time() - start
 
-        # Helper to invoke a model
-        def invoke_model(config):
-            # Sends a chat request to the Hugging Face hosted model
-            completion = client.chat.completions.create(
-                model=config["hf_model"],
-                messages=[
-                    {
-                        "role": "user",
-                        "content": user_message
-                    }
-                ],
-            )
-            return completion.choices[0].message.content
-
-        # Call each selected model
-        for model_key in selected_models:
-            # Get model dict information
-            config = model_configs.get(model_key)
-            if not config:
-                continue
             try:
-                # Calls the model and gets its answer
-                model_response = invoke_model(config).strip()  # Sends json
-                responses.append({
-                    "model": config["label"],
-                    "response": model_response
-                })
-                # Adds to avail. responses = Good responses
-                if model_response:
-                    available_responses.append((config["label"], model_response))
-            except Exception as model_err:
-                print(f"Error calling {config['label']}: {model_err}")
-                # Adds fail as a response so front end can get it
-                responses.append({
-                    "model": config["label"],
-                    "response": f"Error: {str(model_err)}"
-                })
+                response, elapsed = call_once()
+                print(f"[{cfg['label']}] OK ({elapsed:.2f}s)")
+                return {
+                    "model": cfg["label"],
+                    "response": response,
+                    "success": True,
+                    "elapsed": elapsed,
+                }
+            except Exception as e:
+                print(f"[{cfg['label']}] Retry after error: {e}")
+                try:
+                    time.sleep(0.3)
+                    response, elapsed = call_once()
+                    return {
+                        "model": cfg["label"],
+                        "response": response,
+                        "success": True,
+                        "elapsed": elapsed,
+                        "retried": True,
+                    }
+                except Exception as e2:
+                    return {
+                        "model": cfg["label"],
+                        "success": False,
+                        "error": str(e2),
+                    }
 
-        for m in available_responses:
-            connection = get_db_connection()
-            cursor = connection.cursor()
+        # -------------------------
+        # Streaming generator (SSE)
+        # -------------------------
+        def generate():
+            successful = []
+            failed = []
 
-            cursor.execute("""
-                INSERT INTO chats (user_id, model_name, user_message,  model_response)
-                VALUES (%(user_id)s, %(model_name)s, %(user_message)s, %(model_response)s)
-                """, {
-                'user_id': user_id,
-                'model_name': m[0],
-                'user_message': user_message,
-                'model_response': m[1]
-            })
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=len(selected_models)
+            ) as executor:
+                futures = {
+                    executor.submit(invoke_model, MODEL_CONFIGS[m]): m
+                    for m in selected_models
+                }
 
-            connection.commit()
-            cursor.close()
-            connection.close()
+                for future in concurrent.futures.as_completed(futures):
+                    result = future.result()
+                    if result.get("success"):
+                        successful.append(result)
+                        payload = {
+                            "type": "model_response",
+                            "data": result,
+                        }
+                        yield f"data: {json.dumps(payload)}\n\n"
+                    else:
+                        failed.append(result)
+                        print("[MODEL FAILED]", result.get("error"))
 
-        # Create prompt for GPT-OSS by combining available model responses
-        gpt_oss_prompt = user_message
-        if available_responses:
-            combined = "\n\n".join([
-                f"{label} Response:\n{resp}" for label, resp in available_responses
-            ])
-            gpt_oss_prompt = f"""You are a synthesis assistant. Read the user question and the model responses. Produce a single, concise, and actionable answer.
-User question:
-{user_message}
+            # -------------------------
+            # Synthesis step
+            # -------------------------
+            if enable_synthesis and len(successful) >= min_for_synthesis:
+                formatted = "\n".join(
+                    f"===== {r['model']} =====\n{r['response']}\n"
+                    for r in successful
+                )
 
-Model responses:
-{combined}
+                synthesis_prompt = f"""
+You are synthesizing multiple AI responses into ONE correct answer.
 
-Synthesis instructions:
-- Combine the strongest points; resolve disagreements with reasoning.
-- If facts conflict, prefer the more specific, evidenced, and consistent statements.
-- Remove fluff; be direct and organized with short paragraphs or bullets.
-- Do not mention model names or show any raw responses.
-- If there are gaps or uncertainty, note them briefly with a suggested next step.
-- If the question is step-by-step, give an ordered list; otherwise provide 1-2 short paragraphs.
-- Keep the answer under 180 words unless brevity would harm clarity.
-- Filter any response out that is not English
+USER QUESTION:
+{base_message}
+
+MODEL RESPONSES:
+{formatted}
+
+RULES:
+- Use only information from the model responses
+- Resolve conflicts logically
+- Do not invent facts
+
+OUTPUT FORMAT:
+
+===REASONING===
+(short explanation)
+
+===ANSWER===
+(final answer)
 """
 
-        # Call GPT-OSS model with the combined prompt
-        try:
-            # noinspection PyTypeChecker
-            gpt_oss_completion = client.chat.completions.create(
-                model="openai/gpt-oss-20b:novita",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": gpt_oss_prompt
-                    }
-                ],
-            )
-            gpt_oss_response = gpt_oss_completion.choices[0].message.content
-            responses.append({
-                "model": "GPT-OSS",
-                "response": gpt_oss_response
-            })
-        except Exception as gpt_oss_err:
-            print(f"Error calling GPT-OSS: {gpt_oss_err}")
-            responses.append({
-                "model": "GPT-OSS",
-                "response": f"Error: {str(gpt_oss_err)}"
-            })
+                try:
+                    completion = client.chat.completions.create(
+                        model="openai/gpt-oss-20b:novita",
+                        messages=[{"role": "user", "content": synthesis_prompt}],
+                        max_tokens=1500,
+                        timeout=90,
+                        frequency_penalty=1.2,
+                    )
 
-        # Return both responses
-        return jsonify({
-            "responses": responses,
-            "success": True
-        }), 200
+                    synthesis_text = strip_repetition(
+                        completion.choices[0].message.content
+                    )
+
+                    payload = {
+                        "type": "synthesis",
+                        "data": {
+                            "model": "GPT-OSS",
+                            "response": synthesis_text,
+                        },
+                    }
+                    yield f"data: {json.dumps(payload)}\n\n"
+
+                except Exception as e:
+                    payload = {
+                        "type": "synthesis",
+                        "data": {
+                            "model": "GPT-OSS",
+                            "error": True,
+                            "response": str(e),
+                        },
+                    }
+                    yield f"data: {json.dumps(payload)}\n\n"
+
+            # -------------------------
+            # Done
+            # -------------------------
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+        return Response(
+            generate(),
+            mimetype="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     except Exception as err:
-        print(f"Error in chat endpoint: {err}")
-        return jsonify({
-            "error": str(err),
-            "success": False
-        }), 500
+        print("Fatal error:", err)
+        return jsonify({"success": False, "error": str(err)}), 500
