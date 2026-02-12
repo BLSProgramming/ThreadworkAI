@@ -162,7 +162,11 @@ function TrialChat({ onClose, initialQuestion = '' }) {
   const sendMessage = async (text) => {
     if (!text.trim()) return;
 
-    setMessages((prev) => [...prev, { id: Date.now(), text, sender: 'user' }]);
+    const userMessageId = Date.now();
+    const botMessageId = userMessageId + 1;
+    const allResponses = {};
+
+    setMessages((prev) => [...prev, { id: userMessageId, text, sender: 'user' }]);
     setInput('');
     setIsLoading(true);
 
@@ -173,39 +177,79 @@ function TrialChat({ onClose, initialQuestion = '' }) {
         body: JSON.stringify({ message: text }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.responses && Array.isArray(data.responses)) {
-          const modelResponses = {};
-          data.responses.forEach((resp) => {
-            modelResponses[resp.model] = resp.response;
-          });
-          const synthesized = modelResponses['GPT-OSS'] || 'No synthesis available';
-
-          // Build allResponses excluding the synthesis model
-          const individualResponses = {};
-          data.responses.forEach((resp) => {
-            if (resp.model !== 'GPT-OSS') {
-              individualResponses[resp.model.toLowerCase()] = resp.response;
-            }
-          });
-
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: Date.now() + 1,
-              text: synthesized,
-              sender: 'bot',
-              model: 'Threadwork AI',
-              allResponses: individualResponses,
-            },
-          ]);
-        }
-      } else {
+      if (!response.ok) {
         setMessages((prev) => [
           ...prev,
           { id: Date.now() + 1, text: 'Something went wrong. Please try again.', sender: 'bot' },
         ]);
+        return;
+      }
+
+      if (!response.body) {
+        throw new Error('No response body');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const upsertBotMessage = (update) => {
+        setMessages((currentMessages) => {
+          const existing = currentMessages.find((m) => m.id === botMessageId);
+          if (existing) {
+            return currentMessages.map((m) =>
+              m.id === botMessageId
+                ? {
+                    ...m,
+                    ...update,
+                    allResponses: { ...m.allResponses, ...allResponses },
+                  }
+                : m
+            );
+          }
+          return [
+            ...currentMessages,
+            {
+              id: botMessageId,
+              text: null,
+              sender: 'bot',
+              model: 'Threadwork AI',
+              allResponses: { ...allResponses },
+              ...update,
+            },
+          ];
+        });
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+
+        for (let i = 0; i < lines.length - 1; i += 1) {
+          const line = lines[i];
+          if (!line.startsWith('data: ')) continue;
+
+          const jsonStr = line.slice(6);
+          try {
+            const event = JSON.parse(jsonStr);
+            if (event.type === 'model_response') {
+              const { model, response: modelText } = event.data;
+              allResponses[model.toLowerCase()] = modelText;
+              upsertBotMessage({});
+            } else if (event.type === 'synthesis') {
+              upsertBotMessage({ text: event.data?.response || '' });
+            } else if (event.type === 'done') {
+              setIsLoading(false);
+            }
+          } catch (err) {
+            console.error('Trial chat SSE parse error:', err);
+          }
+        }
+
+        buffer = lines[lines.length - 1];
       }
     } catch {
       setMessages((prev) => [
@@ -224,23 +268,23 @@ function TrialChat({ onClose, initialQuestion = '' }) {
 
   const TRIAL_MODEL_STYLES = [
     {
+      key: 'deepseek',
+      title: 'DeepSeek',
+      container: 'bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200',
+      heading: 'text-blue-700',
+      collapse: 'bg-blue-50 text-blue-700 hover:bg-blue-100',
+    },
+    {
       key: 'llama',
       title: 'Llama',
       container: 'bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200',
       heading: 'text-purple-700',
       collapse: 'bg-purple-50 text-purple-700 hover:bg-purple-100',
     },
-    {
-      key: 'qwen',
-      title: 'Qwen',
-      container: 'bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200',
-      heading: 'text-emerald-700',
-      collapse: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
-    },
   ];
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="h-screen bg-white flex flex-col overflow-hidden">
       {/* Top bar */}
       <nav className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-3">
@@ -272,7 +316,7 @@ function TrialChat({ onClose, initialQuestion = '' }) {
       </nav>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto bg-gradient-to-b from-gray-50 to-white">
+      <div className="flex-1 min-h-0 overflow-y-auto bg-gradient-to-b from-gray-50 to-white">
         <div className="max-w-7xl mx-auto px-3 py-6 space-y-6">
           {/* Header card */}
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 flex items-center justify-between">
@@ -323,10 +367,10 @@ function TrialChat({ onClose, initialQuestion = '' }) {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex gap-6">
+                    <div className="flex gap-6 min-w-0">
                       {/* Individual model responses */}
                       {message.allResponses && Object.keys(message.allResponses).length > 0 && (
-                        <div className="flex-[0.75] max-w-xl space-y-4">
+                        <div className="flex-[0.75] max-w-xl space-y-4 min-w-0">
                           {TRIAL_MODEL_STYLES.filter((item) => message.allResponses[item.key])
                             .map((item) => (
                               <div
@@ -353,7 +397,7 @@ function TrialChat({ onClose, initialQuestion = '' }) {
                       )}
 
                       {/* Synthesized response */}
-                      <div className="flex-[2.25]">
+                      <div className="flex-[2.25] min-w-0">
                         <div className="bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900 rounded-xl rounded-bl-none h-fit shadow-sm">
                           {message.text ? (
                             <Collapsible

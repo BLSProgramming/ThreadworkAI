@@ -94,7 +94,7 @@ function Signup() {
 
       {/* Right Panel - Signup Form */}
       <div className="flex-1 flex items-center justify-center p-8 lg:p-12">
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-[400px]">
           {/* Mobile logo */}
           <div className="lg:hidden flex justify-center mb-8">
             <div className="w-12 h-12 bg-gradient-to-br from-violet-600 to-purple-600 rounded-xl flex items-center justify-center">

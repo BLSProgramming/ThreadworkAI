@@ -23,12 +23,13 @@ function GoogleOAuth({ onSuccess, isSignup = false }) {
         
         // Render the Google button in the container
         if (googleButtonRef.current) {
+          const buttonWidth = googleButtonRef.current.offsetWidth || 360;
           window.google.accounts.id.renderButton(
             googleButtonRef.current,
             {
               theme: 'outline',
               size: 'large',
-              width: googleButtonRef.current.offsetWidth,
+              width: buttonWidth,
               text: isSignup ? 'signup_with' : 'signin_with',
               shape: 'rectangular',
               logo_alignment: 'left'
@@ -85,7 +86,7 @@ function GoogleOAuth({ onSuccess, isSignup = false }) {
   return (
     <>
       {/* Google Button Container */}
-      <div 
+      <div
         ref={googleButtonRef}
         className="w-full mb-6"
         style={{ minHeight: '44px' }}
