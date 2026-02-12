@@ -6,6 +6,7 @@ from auth_user import get_or_create_user
 
 from dotenv import load_dotenv
 import os
+import traceback
 
 load_dotenv()
 
@@ -22,11 +23,12 @@ def google_signup():
         if not credential:
             return jsonify({"error": "No credential provided"}), 400
 
-        # Verify the Google token
+        # Verify the Google token (10s clock-skew tolerance)
         idinfo = id_token.verify_oauth2_token(
             credential,
             requests.Request(),
-            GOOGLE_CLIENT_ID
+            GOOGLE_CLIENT_ID,
+            clock_skew_in_seconds=10
         )
 
         # Create or get user
@@ -67,12 +69,22 @@ def google_login():
         if not credential:
             return jsonify({"error": "No credential provided"}), 400
 
-        # Verify the Google token
-        idinfo = id_token.verify_oauth2_token(
-            credential,
-            requests.Request(),
-            GOOGLE_CLIENT_ID
-        )
+        # Verify the Google token (10s clock-skew tolerance)
+        # Retry once on transient ValueError (key-fetch hiccup)
+        idinfo = None
+        for attempt in range(2):
+            try:
+                idinfo = id_token.verify_oauth2_token(
+                    credential,
+                    requests.Request(),
+                    GOOGLE_CLIENT_ID,
+                    clock_skew_in_seconds=10
+                )
+                break
+            except ValueError as ve:
+                print(f"Google login verify attempt {attempt+1} failed: {ve}")
+                if attempt == 1:
+                    raise
 
         # Get or create user (same logic as signup for OAuth)
         user = get_or_create_user(
@@ -92,7 +104,10 @@ def google_login():
         }), 200
 
     except ValueError as e:
-        # Invalid token
+        print("Google login ValueError:", str(e))
+        traceback.print_exc()
         return jsonify({"error": "Invalid Google token"}), 401
     except Exception as e:
+        print("Google login Exception:", str(e))
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500

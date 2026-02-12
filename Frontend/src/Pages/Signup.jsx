@@ -71,24 +71,151 @@ function Signup() {
 
   return (
     <div className="min-h-screen flex bg-white">
-      {/* Left Panel - Animation Placeholder */}
+      {/* Left Panel - Threaded Models Web */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden">
-        {/* Animated background shapes - placeholder for future animation */}
+        {/* Ambient background glows */}
         <div className="absolute inset-0">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse"></div>
-          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-violet-500/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-indigo-500/15 rounded-full blur-2xl animate-pulse delay-500"></div>
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-blob"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-violet-500/20 rounded-full blur-3xl animate-blob animation-delay-2000"></div>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-indigo-500/15 rounded-full blur-2xl animate-blob animation-delay-4000"></div>
+          {/* Dot grid */}
+          <div className="absolute inset-0 opacity-[0.03]" style={{backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '28px 28px'}}></div>
         </div>
-        
-        {/* Placeholder content - will be replaced with animation */}
-        <div className="relative z-10 flex flex-col items-center justify-center w-full text-white px-12">
-          <div className="w-20 h-20 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl flex items-center justify-center mb-8 shadow-2xl shadow-purple-500/30">
-            <HiLightningBolt className="w-10 h-10 text-white" />
+
+        {/* Threaded Web Diagram */}
+        <div className="relative z-10 flex flex-col items-center justify-center w-full px-12">
+          <div className="relative" style={{width: '420px', height: '420px'}}>
+            {/* SVG connection lines */}
+            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 420 420" fill="none">
+              {/* Threads from center (210,210) to each model node */}
+              {/* DeepSeek - top */}
+              <line x1="210" y1="210" x2="210" y2="45" stroke="url(#thread1)" strokeWidth="1.5" strokeDasharray="6 4" opacity="0.6">
+                <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="2s" repeatCount="indefinite" />
+              </line>
+              {/* Llama - top right */}
+              <line x1="210" y1="210" x2="355" y2="95" stroke="url(#thread2)" strokeWidth="1.5" strokeDasharray="6 4" opacity="0.6">
+                <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="2.3s" repeatCount="indefinite" />
+              </line>
+              {/* GLM - right */}
+              <line x1="210" y1="210" x2="380" y2="250" stroke="url(#thread3)" strokeWidth="1.5" strokeDasharray="6 4" opacity="0.6">
+                <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="1.8s" repeatCount="indefinite" />
+              </line>
+              {/* Qwen - bottom right */}
+              <line x1="210" y1="210" x2="320" y2="375" stroke="url(#thread4)" strokeWidth="1.5" strokeDasharray="6 4" opacity="0.6">
+                <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="2.5s" repeatCount="indefinite" />
+              </line>
+              {/* Essential - bottom left */}
+              <line x1="210" y1="210" x2="100" y2="375" stroke="url(#thread5)" strokeWidth="1.5" strokeDasharray="6 4" opacity="0.6">
+                <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="2.1s" repeatCount="indefinite" />
+              </line>
+              {/* Moonshot - left */}
+              <line x1="210" y1="210" x2="40" y2="250" stroke="url(#thread6)" strokeWidth="1.5" strokeDasharray="6 4" opacity="0.6">
+                <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="1.9s" repeatCount="indefinite" />
+              </line>
+
+              {/* Inter-model connections (outer web) */}
+              <line x1="210" y1="45" x2="355" y2="95" stroke="white" strokeWidth="0.5" opacity="0.1" />
+              <line x1="355" y1="95" x2="380" y2="250" stroke="white" strokeWidth="0.5" opacity="0.1" />
+              <line x1="380" y1="250" x2="320" y2="375" stroke="white" strokeWidth="0.5" opacity="0.1" />
+              <line x1="320" y1="375" x2="100" y2="375" stroke="white" strokeWidth="0.5" opacity="0.1" />
+              <line x1="100" y1="375" x2="40" y2="250" stroke="white" strokeWidth="0.5" opacity="0.1" />
+              <line x1="40" y1="250" x2="210" y2="45" stroke="white" strokeWidth="0.5" opacity="0.1" />
+
+              {/* Gradient definitions */}
+              <defs>
+                <linearGradient id="thread1" x1="210" y1="210" x2="210" y2="45" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="#a78bfa" />
+                  <stop offset="100%" stopColor="#3b82f6" />
+                </linearGradient>
+                <linearGradient id="thread2" x1="210" y1="210" x2="355" y2="95" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="#a78bfa" />
+                  <stop offset="100%" stopColor="#a855f7" />
+                </linearGradient>
+                <linearGradient id="thread3" x1="210" y1="210" x2="380" y2="250" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="#a78bfa" />
+                  <stop offset="100%" stopColor="#06b6d4" />
+                </linearGradient>
+                <linearGradient id="thread4" x1="210" y1="210" x2="320" y2="375" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="#a78bfa" />
+                  <stop offset="100%" stopColor="#10b981" />
+                </linearGradient>
+                <linearGradient id="thread5" x1="210" y1="210" x2="100" y2="375" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="#a78bfa" />
+                  <stop offset="100%" stopColor="#f97316" />
+                </linearGradient>
+                <linearGradient id="thread6" x1="210" y1="210" x2="40" y2="250" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="#a78bfa" />
+                  <stop offset="100%" stopColor="#ec4899" />
+                </linearGradient>
+              </defs>
+            </svg>
+
+            {/* Center: Threadwork Logo */}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
+              <div className="w-20 h-20 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-purple-500/40 ring-4 ring-purple-500/20">
+                <HiLightningBolt className="w-10 h-10 text-white" />
+              </div>
+            </div>
+
+            {/* Orbiting glow ring */}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full border border-purple-500/20 animate-pulse"></div>
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-44 h-44 rounded-full border border-purple-500/10"></div>
+
+            {/* Model Nodes */}
+            {/* DeepSeek - top center */}
+            <div className="absolute z-10" style={{left: '210px', top: '45px', transform: 'translate(-50%, -50%)'}}>
+              <div className="w-14 h-14 bg-slate-800/80 backdrop-blur-sm border border-blue-500/30 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/10 hover:scale-110 hover:border-blue-400/60 transition-all duration-300">
+                <span className="text-xl">🔷</span>
+              </div>
+              <div className="text-[10px] text-blue-300 font-medium text-center mt-1.5 tracking-wide">DeepSeek</div>
+            </div>
+
+            {/* Llama - top right */}
+            <div className="absolute z-10" style={{left: '355px', top: '95px', transform: 'translate(-50%, -50%)'}}>
+              <div className="w-14 h-14 bg-slate-800/80 backdrop-blur-sm border border-purple-500/30 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/10 hover:scale-110 hover:border-purple-400/60 transition-all duration-300">
+                <span className="text-xl">🦙</span>
+              </div>
+              <div className="text-[10px] text-purple-300 font-medium text-center mt-1.5 tracking-wide">Llama</div>
+            </div>
+
+            {/* GLM - right */}
+            <div className="absolute z-10" style={{left: '380px', top: '250px', transform: 'translate(-50%, -50%)'}}>
+              <div className="w-14 h-14 bg-slate-800/80 backdrop-blur-sm border border-cyan-500/30 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/10 hover:scale-110 hover:border-cyan-400/60 transition-all duration-300">
+                <span className="text-xl">🌐</span>
+              </div>
+              <div className="text-[10px] text-cyan-300 font-medium text-center mt-1.5 tracking-wide">GLM-4.6</div>
+            </div>
+
+            {/* Qwen - bottom right */}
+            <div className="absolute z-10" style={{left: '320px', top: '375px', transform: 'translate(-50%, -50%)'}}>
+              <div className="w-14 h-14 bg-slate-800/80 backdrop-blur-sm border border-emerald-500/30 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/10 hover:scale-110 hover:border-emerald-400/60 transition-all duration-300">
+                <span className="text-xl">✨</span>
+              </div>
+              <div className="text-[10px] text-emerald-300 font-medium text-center mt-1.5 tracking-wide">Qwen</div>
+            </div>
+
+            {/* Essential - bottom left */}
+            <div className="absolute z-10" style={{left: '100px', top: '375px', transform: 'translate(-50%, -50%)'}}>
+              <div className="w-14 h-14 bg-slate-800/80 backdrop-blur-sm border border-orange-500/30 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/10 hover:scale-110 hover:border-orange-400/60 transition-all duration-300">
+                <span className="text-xl">🎨</span>
+              </div>
+              <div className="text-[10px] text-orange-300 font-medium text-center mt-1.5 tracking-wide">Essential</div>
+            </div>
+
+            {/* Moonshot - left */}
+            <div className="absolute z-10" style={{left: '40px', top: '250px', transform: 'translate(-50%, -50%)'}}>
+              <div className="w-14 h-14 bg-slate-800/80 backdrop-blur-sm border border-pink-500/30 rounded-xl flex items-center justify-center shadow-lg shadow-pink-500/10 hover:scale-110 hover:border-pink-400/60 transition-all duration-300">
+                <span className="text-xl">🌙</span>
+              </div>
+              <div className="text-[10px] text-pink-300 font-medium text-center mt-1.5 tracking-wide">Moonshot</div>
+            </div>
           </div>
-          <h2 className="text-3xl font-bold mb-3 text-center">Threadwork AI</h2>
-          <p className="text-white/60 text-center max-w-sm">
-            Animation coming soon
-          </p>
+
+          {/* Tagline below diagram */}
+          <div className="mt-8 text-center">
+            <h2 className="text-2xl font-bold text-white mb-2">All Models, One Thread</h2>
+            <p className="text-white/50 text-sm max-w-xs mx-auto">Six AI models woven together to give you the most complete answer every time.</p>
+          </div>
         </div>
       </div>
 

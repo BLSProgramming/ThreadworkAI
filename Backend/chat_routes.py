@@ -66,9 +66,9 @@ def chat():
         enable_synthesis = data.get('synthesize', True)
         min_for_synthesis = data.get('min_for_synthesis', 2)  # Require at least 2 responses to synthesize
         
-        # Enforce max 4 models
-        if len(selected_models) > 4:
-            selected_models = selected_models[:4]
+        # Enforce max 6 models
+        if len(selected_models) > 6:
+            selected_models = selected_models[:6]
         
         if not user_message:
             return jsonify({"error": "Message cannot be empty"}), 400
