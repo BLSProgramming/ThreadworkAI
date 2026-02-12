@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-function ModelSelector({ selectedModels, setSelectedModels, modelOptions, maxSelected = 4 }) {
+function ModelSelector({ selectedModels, setSelectedModels, modelOptions, maxSelected = 6 }) {
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [modelSearch, setModelSearch] = useState('');
   const [selectedTags, setSelectedTags] = useState([]);

@@ -1,87 +1,104 @@
 import { useState, useEffect, useRef } from 'react';
 import { AiOutlineLoading3Quarters } from '../assets/Icons';
 
+/* ───────────────────────────────────────────────────────────
+ * Module-level singleton state
+ *
+ * google.accounts.id.initialize() must only be called ONCE per
+ * page-load.  In a React SPA the GoogleOAuth component mounts /
+ * unmounts on every route change (Signup ↔ Login), so we keep
+ * the callback pointer and page-context at module scope.
+ * Each mount synchronously updates these variables before the
+ * user can interact with the button, so the singleton callback
+ * always acts on behalf of the currently-mounted page.
+ * ─────────────────────────────────────────────────────────── */
+let _onSuccess = null;
+let _isSignup = false;
+let _gsiInitialized = false;
+
+async function _handleCredentialResponse(response) {
+  const currentIsSignup = _isSignup;
+  const currentOnSuccess = _onSuccess;
+
+  try {
+    const endpoint = currentIsSignup ? '/api/google-signup' : '/api/google-login';
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ credential: response.credential }),
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      currentOnSuccess?.(data);
+    } else {
+      throw new Error(
+        data.message || data.error || `Google ${currentIsSignup ? 'signup' : 'login'} failed`
+      );
+    }
+  } catch (err) {
+    console.error(`Google ${currentIsSignup ? 'signup' : 'login'} error:`, err);
+    alert(`Failed to ${currentIsSignup ? 'sign up' : 'sign in'} with Google. Please try again.`);
+  }
+}
+
 function GoogleOAuth({ onSuccess, isSignup = false }) {
-  const [isLoading, setIsLoading] = useState(false);
   const [isGoogleReady, setIsGoogleReady] = useState(false);
   const googleButtonRef = useRef(null);
 
+  // Synchronously keep module-level pointers current so the
+  // singleton callback always acts on behalf of the *mounted* page.
+  _onSuccess = onSuccess;
+  _isSignup = isSignup;
+
   useEffect(() => {
-    // Initialize Google Sign-In
-    const initializeGoogleSignIn = () => {
-      if (window.google) {
-        const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-        console.log('🔍 Initializing Google Sign-In with client_id:', clientId);
-        console.log('🌐 Current origin:', window.location.origin);
-        
+    let cancelled = false;
+
+    const renderButton = () => {
+      if (!window.google || cancelled || !googleButtonRef.current) return;
+
+      // Initialize GIS exactly once per page-load
+      if (!_gsiInitialized) {
         window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: handleGoogleCallback,
+          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+          callback: _handleCredentialResponse,
           auto_select: false,
-          cancel_on_tap_outside: true
+          cancel_on_tap_outside: true,
         });
-        
-        // Render the Google button in the container
-        if (googleButtonRef.current) {
-          const buttonWidth = googleButtonRef.current.offsetWidth || 360;
-          window.google.accounts.id.renderButton(
-            googleButtonRef.current,
-            {
-              theme: 'outline',
-              size: 'large',
-              width: buttonWidth,
-              text: isSignup ? 'signup_with' : 'signin_with',
-              shape: 'rectangular',
-              logo_alignment: 'left'
-            }
-          );
-        }
-        
-        setIsGoogleReady(true);
+        _gsiInitialized = true;
       }
+
+      // (Re-)render the button with the correct text for this page
+      googleButtonRef.current.innerHTML = '';
+      const buttonWidth = googleButtonRef.current.offsetWidth || 360;
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        theme: 'outline',
+        size: 'large',
+        width: buttonWidth,
+        text: isSignup ? 'signup_with' : 'signin_with',
+        shape: 'rectangular',
+        logo_alignment: 'left',
+      });
+
+      setIsGoogleReady(true);
     };
 
-    // Check if the Google script is loaded
     if (window.google) {
-      initializeGoogleSignIn();
+      renderButton();
     } else {
-      // Wait for the script to load
-      const checkGoogle = setInterval(() => {
+      const poll = setInterval(() => {
         if (window.google) {
-          clearInterval(checkGoogle);
-          initializeGoogleSignIn();
+          clearInterval(poll);
+          renderButton();
         }
       }, 100);
-
-      return () => clearInterval(checkGoogle);
+      return () => { cancelled = true; clearInterval(poll); };
     }
+
+    return () => { cancelled = true; };
   }, [isSignup]);
-
-  const handleGoogleCallback = async (response) => {
-    setIsLoading(true);
-    try {
-      const endpoint = isSignup ? '/api/google-signup' : '/api/google-login';
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ credential: response.credential })
-      });
-      
-      const data = await res.json();
-      
-      if (res.ok) {
-        onSuccess(data);
-      } else {
-        throw new Error(data.message || data.error || `Google ${isSignup ? 'signup' : 'login'} failed`);
-      }
-    } catch (err) {
-      console.error(`Google ${isSignup ? 'signup' : 'login'} error:`, err);
-      alert(`Failed to ${isSignup ? 'sign up' : 'sign in'} with Google. Please try again.`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <>

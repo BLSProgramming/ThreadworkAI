@@ -55,7 +55,9 @@ function LandingPage() {
   const scrollToHero = () => {
     const target = heroInputRef.current;
     if (!target) return;
-    const targetPosition = target.getBoundingClientRect().top + window.scrollY - 200;
+    const inputRect = target.getBoundingClientRect();
+    const offset = window.innerHeight / 2 - inputRect.height / 2;
+    const targetPosition = inputRect.top + window.scrollY - offset;
     const startPosition = window.scrollY;
     const distance = targetPosition - startPosition;
     const duration = 1200;

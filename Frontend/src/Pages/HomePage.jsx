@@ -534,7 +534,7 @@ function HomePage() {
         selectedModels={selectedModels}
         setSelectedModels={setSelectedModels}
         modelOptions={modelOptions}
-        maxSelected={4}
+        maxSelected={6}
       />
 
       <div className="flex-1 overflow-y-auto bg-gradient-to-b from-gray-50 to-white">

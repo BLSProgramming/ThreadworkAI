@@ -128,6 +128,6 @@ export const INITIAL_MODELS_STATE = {
   llama: true,
   glm: true,
   qwen: true,
-  essential: false,
-  moonshot: false,
+  essential: true,
+  moonshot: true,
 };
