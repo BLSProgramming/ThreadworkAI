@@ -629,7 +629,7 @@ function LandingPage() {
 
           <div className="relative left-1/2 right-1/2 -mx-[50vw] w-screen overflow-hidden">
             <div className="flex gap-6 marquee-right px-6">
-              {[...MARQUEE_MODELS, ...MARQUEE_MODELS].map((m, i) => (
+              {[...MARQUEE_MODELS, ...MARQUEE_MODELS, ...MARQUEE_MODELS].map((m, i) => (
                 <div key={`${m.name}-${i}`} className={`bg-white border-2 border-gray-300 rounded-2xl p-6 text-center ${m.hoverBorder} transition-colors duration-200 w-56 shrink-0`}>
                   <div className={`w-12 h-12 ${m.iconBg} rounded-xl flex items-center justify-center mx-auto mb-4`}>
                     <span className="text-2xl">{m.emoji}</span>
