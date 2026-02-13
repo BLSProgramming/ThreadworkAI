@@ -7,6 +7,7 @@ import concurrent.futures
 import json
 import time
 import re
+import threading
 
 load_dotenv()
 
@@ -93,7 +94,7 @@ def chat():
     data = request.json
 
     user_message = f"{data.get('message', '').strip()}. English only."
-    selected_models = data.get('models', ['deepseek', 'llama', 'glm'])
+    selected_models = data.get('models', ['deepseek', 'llama', 'glm', 'essential', 'moonshot'])
     enable_synthesis = data.get('synthesize', True)
     min_for_synthesis = data.get('min_for_synthesis', 2)
 
@@ -108,6 +109,8 @@ def chat():
         "deepseek": {"label": "DeepSeek", "hf_model": "deepseek-ai/DeepSeek-V3.2:novita"},
         "llama": {"label": "Llama", "hf_model": "meta-llama/Llama-3.1-8B-Instruct:novita"},
         "glm": {"label": "GLM", "hf_model": "zai-org/GLM-4.6:novita"},
+        "essential": {"label": "Essential", "hf_model": "EssentialAI/rnj-1-instruct:together"},
+        "moonshot": {"label": "Moonshot", "hf_model": "moonshotai/Kimi-K2-Instruct:novita"},
     }
 
     def invoke_model(cfg):
@@ -132,16 +135,19 @@ def chat():
     def generate():
         results = []
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             futures = [
                 executor.submit(invoke_model, model_configs[m])
                 for m in selected_models if m in model_configs
             ]
 
-            for f in concurrent.futures.as_completed(futures):
-                r = f.result()
-                results.append(r)
-                yield f"data: {json.dumps({'type': 'model_response', 'data': r})}\n\n"
+            for f in concurrent.futures.as_completed(futures, timeout=120):
+                try:
+                    r = f.result(timeout=90)
+                    results.append(r)
+                    yield f"data: {json.dumps({'type': 'model_response', 'data': r})}\n\n"
+                except Exception as e:
+                    print(f"[chat] Model future error: {e}")
 
         if enable_synthesis and len(results) >= min_for_synthesis:
             formatted = "\n".join(
@@ -163,52 +169,83 @@ TASK:
 Produce ONE correct, internally consistent answer using only the model responses.
 """
 
-            completion = client.chat.completions.create(
-                model="openai/gpt-oss-20b:novita",
-                messages=[{"role": "user", "content": synthesis_prompt}],
-                max_tokens=2048,
-                timeout=90
-            )
+            # Stream the synthesis token-by-token
+            synthesis_chunks = []
+            try:
+                stream = client.chat.completions.create(
+                    model="openai/gpt-oss-20b:novita",
+                    messages=[{"role": "user", "content": synthesis_prompt}],
+                    max_tokens=2048,
+                    timeout=90,
+                    stream=True,
+                )
 
-            synthesis_response = strip_repetition(
-                completion.choices[0].message.content
-            )
+                for chunk in stream:
+                    delta = chunk.choices[0].delta
+                    if delta.content:
+                        synthesis_chunks.append(delta.content)
+                        yield f"data: {json.dumps({'type': 'synthesis_chunk', 'data': delta.content})}\n\n"
 
-            # -------- MEMORY WRITE-BACK -------- #
-            memory_prompt = f"""
+            except Exception as e:
+                print(f"[chat] Synthesis stream error: {e}")
+                if not synthesis_chunks:
+                    yield f"data: {json.dumps({'type': 'synthesis_chunk', 'data': 'Synthesis timed out. Individual model responses are shown above.'})}\n\n"
+
+            synthesis_response = strip_repetition("".join(synthesis_chunks))
+
+            # Signal synthesis is complete
+            yield f"data: {json.dumps({'type': 'synthesis_done'})}\n\n"
+
+            # -------- MEMORY WRITE-BACK (background) -------- #
+            def _save_memory():
+                try:
+                    memory_prompt = f"""
 Extract long-term memory from this exchange.
 Return NONE if nothing stable.
 
 User: {user_message}
 Assistant: {synthesis_response}
 """
+                    memory_result = client.chat.completions.create(
+                        model="openai/gpt-oss-20b:novita",
+                        messages=[{"role": "user", "content": memory_prompt}],
+                        max_tokens=150,
+                        timeout=30,
+                    )
 
-            memory_result = client.chat.completions.create(
-                model="openai/gpt-oss-20b:novita",
-                messages=[{"role": "user", "content": memory_prompt}],
-                max_tokens=150
-            )
+                    new_memory = memory_result.choices[0].message.content.strip()
 
-            new_memory = memory_result.choices[0].message.content.strip()
+                    connection = get_db_connection()
+                    cursor = connection.cursor()
+                    cursor.execute("""
+                        INSERT INTO chats (user_id, user_message, model_response, memory_summary)
+                        VALUES (%s, %s, %s, %s)
+                    """, (
+                        user_id,
+                        user_message,
+                        synthesis_response,
+                        None if new_memory.upper() == "NONE" else new_memory,
+                    ))
+                    connection.commit()
+                    cursor.close()
+                    connection.close()
+                except Exception as e:
+                    print(f"[chat] Background memory save error: {e}")
+                    # Still save the chat even if memory extraction fails
+                    try:
+                        connection = get_db_connection()
+                        cursor = connection.cursor()
+                        cursor.execute("""
+                            INSERT INTO chats (user_id, user_message, model_response)
+                            VALUES (%s, %s, %s)
+                        """, (user_id, user_message, synthesis_response))
+                        connection.commit()
+                        cursor.close()
+                        connection.close()
+                    except Exception as db_err:
+                        print(f"[chat] Fallback DB save error: {db_err}")
 
-            connection = get_db_connection()
-            cursor = connection.cursor()
-
-            cursor.execute("""
-                INSERT INTO chats (user_id, user_message, model_response, memory_summary)
-                VALUES (%s, %s, %s, %s)
-            """, (
-                user_id,
-                user_message,
-                synthesis_response,
-                None if new_memory.upper() == "NONE" else new_memory
-            ))
-
-            connection.commit()
-            cursor.close()
-            connection.close()
-
-            yield f"data: {json.dumps({'type': 'synthesis', 'data': synthesis_response})}\n\n"
+            threading.Thread(target=_save_memory, daemon=True).start()
 
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 

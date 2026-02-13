@@ -197,25 +197,28 @@ function TrialChat({ onClose, initialQuestion = '' }) {
         setMessages((currentMessages) => {
           const existing = currentMessages.find((m) => m.id === botMessageId);
           if (existing) {
-            return currentMessages.map((m) =>
-              m.id === botMessageId
-                ? {
-                    ...m,
-                    ...update,
-                    allResponses: { ...m.allResponses, ...allResponses },
-                  }
-                : m
-            );
+            return currentMessages.map((m) => {
+              if (m.id !== botMessageId) return m;
+              const merged = {
+                ...m,
+                allResponses: { ...m.allResponses, ...allResponses },
+              };
+              if (update.textChunk) {
+                merged.text = (m.text || '') + update.textChunk;
+              } else if ('text' in update) {
+                merged.text = update.text;
+              }
+              return merged;
+            });
           }
           return [
             ...currentMessages,
             {
               id: botMessageId,
-              text: null,
+              text: update.textChunk || update.text || null,
               sender: 'bot',
               model: 'Threadwork AI',
               allResponses: { ...allResponses },
-              ...update,
             },
           ];
         });
@@ -239,9 +242,11 @@ function TrialChat({ onClose, initialQuestion = '' }) {
               const { model, response: modelText } = event.data;
               allResponses[model.toLowerCase()] = modelText;
               upsertBotMessage({});
+            } else if (event.type === 'synthesis_chunk') {
+              upsertBotMessage({ textChunk: event.data });
             } else if (event.type === 'synthesis') {
-              upsertBotMessage({ text: event.data?.response || '' });
-            } else if (event.type === 'done') {
+              upsertBotMessage({ text: event.data?.response || event.data || '' });
+            } else if (event.type === 'synthesis_done' || event.type === 'done') {
               setIsLoading(false);
             }
           } catch (err) {
