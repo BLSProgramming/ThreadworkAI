@@ -54,14 +54,14 @@ def chat():
     user_id = session['user_id']
     """
     Handle chat messages with streaming responses.
-    Expects JSON: { "message": "user message here", "models": ["deepseek", "llama", "glm", "qwen"], "stream": true }
+    Expects JSON: { "message": "user message here", "models": ["deepseek", "llama", "glm"], "stream": true }
     Returns: Server-Sent Events stream with responses as they're generated
     """
     try:
         data = request.json
         user_message = f"{data.get('message', '').strip()}. English only. Do not mention in your response that I asked this"
-        selected_models = data.get('models') or ['deepseek', 'llama', 'glm', 'qwen']
-        valid_model_names = {'deepseek', 'llama', 'glm', 'qwen', 'essential', 'moonshot'}
+        selected_models = data.get('models') or ['deepseek', 'llama', 'glm']
+        valid_model_names = {'deepseek', 'llama', 'glm', 'essential', 'moonshot'}
         selected_models = [m for m in selected_models if m in valid_model_names]
         enable_synthesis = data.get('synthesize', True)
         min_for_synthesis = data.get('min_for_synthesis', 2)  # Require at least 2 responses to synthesize
@@ -88,10 +88,6 @@ def chat():
             "glm": {
                 "label": "GLM",
                 "hf_model": "zai-org/GLM-4.6:novita",
-            },
-            "qwen": {
-                "label": "Qwen",
-                "hf_model": "Qwen/Qwen3-Coder-30B-A3B-Instruct:nebius",  
             },
             "essential": {
                 "label": "Essential",
