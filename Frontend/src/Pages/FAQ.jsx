@@ -13,7 +13,7 @@ function FAQ() {
     },
     {
       question: "Which AI models does Threadwork support?",
-      answer: "We currently support DeepSeek, Llama, GLM-4, and Qwen models. Each model brings unique strengths and perspectives to your questions. Our GPT-OSS synthesis engine combines their responses into a single, coherent answer."
+      answer: "We currently support DeepSeek, Llama, GLM-4, Essential, and Moonshot models. Each model brings unique strengths and perspectives to your questions. Our GPT-OSS synthesis engine combines their responses into a single, coherent answer."
     },
     {
       question: "How does the synthesis work?",

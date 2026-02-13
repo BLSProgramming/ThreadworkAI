@@ -9,7 +9,6 @@ const MARQUEE_MODELS = [
   { name: 'DeepSeek', desc: 'Reasoning, math, coding', emoji: '🔷', hoverBorder: 'hover:border-blue-400', iconBg: 'bg-blue-500/20' },
   { name: 'Llama', desc: 'Fast, general Q&A', emoji: '🦙', hoverBorder: 'hover:border-purple-400', iconBg: 'bg-purple-500/20' },
   { name: 'GLM-4.6', desc: 'Multilingual, reasoning', emoji: '🌐', hoverBorder: 'hover:border-cyan-400', iconBg: 'bg-cyan-500/20' },
-  { name: 'Qwen', desc: 'Coding, tools', emoji: '✨', hoverBorder: 'hover:border-emerald-400', iconBg: 'bg-emerald-500/20' },
   { name: 'Essential', desc: 'Creative, writing', emoji: '🎨', hoverBorder: 'hover:border-orange-400', iconBg: 'bg-orange-500/20' },
   { name: 'Moonshot', desc: 'Long reasoning', emoji: '🌙', hoverBorder: 'hover:border-pink-400', iconBg: 'bg-pink-500/20' },
 ];
@@ -212,10 +211,6 @@ function LandingPage() {
                         <div className="px-3 py-2 text-[10px] font-bold text-purple-700 uppercase tracking-wider font-mono">Llama</div>
                         <div className="px-3 pb-3 text-xs text-gray-600">React has a larger ecosystem and job market, making it a practical first choice...</div>
                       </div>
-                      <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200 rounded-xl overflow-hidden border-l-4 border-l-emerald-400">
-                        <div className="px-3 py-2 text-[10px] font-bold text-emerald-700 uppercase tracking-wider font-mono">Qwen</div>
-                        <div className="px-3 pb-3 text-xs text-gray-600">Vue's gentler learning curve makes it ideal for beginners who want to understand core concepts...</div>
-                      </div>
                       <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl overflow-hidden border-l-4 border-l-blue-400">
                         <div className="px-3 py-2 text-[10px] font-bold text-blue-700 uppercase tracking-wider font-mono">DeepSeek</div>
                         <div className="px-3 pb-3 text-xs text-gray-600">Both are excellent — React for career opportunities, Vue for learning fundamentals cleanly...</div>
@@ -293,10 +288,6 @@ function LandingPage() {
                   <div className="flex items-center justify-between text-sm">
                     <span className="font-semibold text-cyan-700">GLM-4.6</span>
                     <span className="text-gray-600">Multilingual, reasoning</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-semibold text-emerald-700">Qwen</span>
-                    <span className="text-gray-600">Coding, tools</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="font-semibold text-orange-700">Essential</span>
@@ -496,7 +487,7 @@ function LandingPage() {
             </div>
 
             {/* Row 2: Parallel Models */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 max-w-3xl mx-auto">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6 max-w-4xl mx-auto">
               <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 text-center">
                 <span className="text-lg">🔷</span>
                 <div className="text-xs font-bold text-blue-700 mt-1">DeepSeek</div>
@@ -527,30 +518,48 @@ function LandingPage() {
                 </div>
                 <p className="text-[10px] text-cyan-600 mt-2 leading-tight">"Vue's learning curve is gentler..."</p>
               </div>
-              <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4 text-center">
-                <span className="text-lg">✨</span>
-                <div className="text-xs font-bold text-emerald-700 mt-1">Qwen</div>
+              <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4 text-center">
+                <span className="text-lg">🎨</span>
+                <div className="text-xs font-bold text-orange-700 mt-1">Essential</div>
                 <div className="mt-2 space-y-1">
-                  <div className="h-0.5 bg-emerald-200 rounded-full w-full"></div>
-                  <div className="h-0.5 bg-emerald-200 rounded-full w-5/6"></div>
-                  <div className="h-0.5 bg-emerald-200 rounded-full w-2/3"></div>
+                  <div className="h-0.5 bg-orange-200 rounded-full w-full"></div>
+                  <div className="h-0.5 bg-orange-200 rounded-full w-5/6"></div>
+                  <div className="h-0.5 bg-orange-200 rounded-full w-2/3"></div>
                 </div>
-                <p className="text-[10px] text-emerald-600 mt-2 leading-tight">"Depends on your goals..."</p>
+                <p className="text-[10px] text-orange-600 mt-2 leading-tight">"Start with what excites you..."</p>
+              </div>
+              <div className="bg-pink-50 border-2 border-pink-200 rounded-xl p-4 text-center">
+                <span className="text-lg">🌙</span>
+                <div className="text-xs font-bold text-pink-700 mt-1">Moonshot</div>
+                <div className="mt-2 space-y-1">
+                  <div className="h-0.5 bg-pink-200 rounded-full w-full"></div>
+                  <div className="h-0.5 bg-pink-200 rounded-full w-3/4"></div>
+                  <div className="h-0.5 bg-pink-200 rounded-full w-5/6"></div>
+                </div>
+                <p className="text-[10px] text-pink-600 mt-2 leading-tight">"Plan a 6-month roadmap..."</p>
               </div>
             </div>
 
             {/* Converging arrows */}
             <div className="flex justify-center mb-6">
-              <div className="relative w-64 h-12">
+              <div className="relative w-80 h-12">
+                {/* Far left line */}
+                <div className="absolute left-0 top-0 w-1/2 h-full">
+                  <div className="absolute top-0 right-1/2 w-0.5 h-full bg-gradient-to-b from-blue-300 to-indigo-400 origin-top" style={{transform: 'rotate(-20deg)'}}></div>
+                </div>
                 {/* Left line */}
                 <div className="absolute left-0 top-0 w-1/2 h-full">
-                  <div className="absolute top-0 right-0 w-0.5 h-full bg-gradient-to-b from-purple-300 to-indigo-400 origin-top" style={{transform: 'rotate(-15deg)'}}></div>
+                  <div className="absolute top-0 right-0 w-0.5 h-full bg-gradient-to-b from-purple-300 to-indigo-400 origin-top" style={{transform: 'rotate(-10deg)'}}></div>
                 </div>
                 {/* Center line */}
-                <div className="absolute left-1/2 top-0 w-0.5 h-full bg-gradient-to-b from-gray-300 to-indigo-400 -translate-x-1/2"></div>
+                <div className="absolute left-1/2 top-0 w-0.5 h-full bg-gradient-to-b from-cyan-300 to-indigo-400 -translate-x-1/2"></div>
                 {/* Right line */}
                 <div className="absolute right-0 top-0 w-1/2 h-full">
-                  <div className="absolute top-0 left-0 w-0.5 h-full bg-gradient-to-b from-emerald-300 to-indigo-400 origin-top" style={{transform: 'rotate(15deg)'}}></div>
+                  <div className="absolute top-0 left-0 w-0.5 h-full bg-gradient-to-b from-orange-300 to-indigo-400 origin-top" style={{transform: 'rotate(10deg)'}}></div>
+                </div>
+                {/* Far right line */}
+                <div className="absolute right-0 top-0 w-1/2 h-full">
+                  <div className="absolute top-0 left-1/2 w-0.5 h-full bg-gradient-to-b from-pink-300 to-indigo-400 origin-top" style={{transform: 'rotate(20deg)'}}></div>
                 </div>
                 {/* Arrow tip */}
                 <svg className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-4 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
@@ -600,7 +609,7 @@ function LandingPage() {
                     <span className="text-purple-600 text-xs mt-0.5">🤝</span>
                     <div>
                       <div className="text-[10px] font-bold text-purple-700 uppercase tracking-wider mb-0.5">Model Agreement</div>
-                      <p className="text-xs text-gray-600">All 4 models agreed: skills transfer between frameworks, both have excellent docs</p>
+                      <p className="text-xs text-gray-600">All 5 models agreed: skills transfer between frameworks, both have excellent docs</p>
                     </div>
                   </div>
                   {/* Conflict badge */}
@@ -608,7 +617,7 @@ function LandingPage() {
                     <span className="text-amber-600 text-xs mt-0.5">⚖️</span>
                     <div>
                       <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-0.5">Resolved Disagreement</div>
-                      <p className="text-xs text-gray-600">2 models favored React first, 2 favored Vue — resolved based on career vs. learning goals</p>
+                      <p className="text-xs text-gray-600">3 models favored React first, 2 favored Vue — resolved based on career vs. learning goals</p>
                     </div>
                   </div>
                 </div>
@@ -694,7 +703,7 @@ function LandingPage() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <FiZap className="w-4 h-4" />
-                  <span>6 AI models included</span>
+                  <span>5 AI models included</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <FiGrid className="w-4 h-4" />

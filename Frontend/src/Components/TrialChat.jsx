@@ -349,7 +349,7 @@ function TrialChat({ onClose, initialQuestion = '' }) {
                 </div>
                 <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-200">
                   <p className="text-sm font-medium text-gray-900 mb-1">🎯 2 trial models</p>
-                  <p className="text-xs text-gray-600">Llama & Qwen</p>
+                  <p className="text-xs text-gray-600">DeepSeek & Llama</p>
                 </div>
               </div>
             </div>
