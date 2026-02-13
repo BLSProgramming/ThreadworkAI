@@ -73,7 +73,6 @@ export const MODEL_OPTIONS = [
   { key: 'deepseek', label: 'DeepSeek', tags: ['Reasoning', 'Coding', 'Math', 'Long Context'] },
   { key: 'llama', label: 'Llama', tags: ['Fast', 'General', 'Lightweight'] },
   { key: 'glm', label: 'GLM-4.6', tags: ['Multilingual', 'Reasoning', 'Coding'] },
-  { key: 'qwen', label: 'Qwen', tags: ['Coding', 'Reasoning', 'Tools'] },
   { key: 'essential', label: 'Essential', tags: ['Creative', 'Writing', 'General'] },
   { key: 'moonshot', label: 'Moonshot', tags: ['Long Reasoning', 'Planning', 'Multilingual'] },
 ];
@@ -100,13 +99,6 @@ export const MODEL_STYLES = {
     heading: 'text-cyan-700',
     collapse: 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100',
   },
-  qwen: {
-    key: 'qwen',
-    title: 'Qwen',
-    container: 'bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200',
-    heading: 'text-emerald-700',
-    collapse: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
-  },
   essential: {
     key: 'essential',
     title: 'Essential',
@@ -127,7 +119,6 @@ export const INITIAL_MODELS_STATE = {
   deepseek: true,
   llama: true,
   glm: true,
-  qwen: true,
   essential: true,
   moonshot: true,
 };

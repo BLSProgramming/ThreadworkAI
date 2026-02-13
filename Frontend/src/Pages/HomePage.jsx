@@ -534,7 +534,7 @@ function HomePage() {
         selectedModels={selectedModels}
         setSelectedModels={setSelectedModels}
         modelOptions={modelOptions}
-        maxSelected={6}
+        maxSelected={5}
       />
 
       <div className="flex-1 overflow-y-auto bg-gradient-to-b from-gray-50 to-white">
@@ -594,7 +594,6 @@ function HomePage() {
                             MODEL_STYLES.deepseek,
                             MODEL_STYLES.llama,
                             MODEL_STYLES.glm,
-                            MODEL_STYLES.qwen,
                             MODEL_STYLES.essential,
                             MODEL_STYLES.moonshot,
                           ]
