@@ -481,3 +481,37 @@ def update_chat_name():
 
     return jsonify({"success": True, "chat_name": chat_name})
 
+@chat_routes.route('/api/chats/<int:chat_id>', methods=["DELETE"])
+def delete_chat(chat_id):
+    if 'user_id' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        cursor.execute("""
+        DELETE FROM chats
+        WHERE id = %(chat_id)s AND user_id = %(user_id)s
+        RETURNING id;
+        """, {
+            'chat_id': chat_id,
+            'user_id': session["user_id"]
+        })
+
+        deleted = cursor.fetchone()
+        connection.commit()
+        cursor.close()
+        connection.close()
+
+        if not deleted:
+            return jsonify({"error": "Chat not found"}), 404
+
+        return jsonify({
+            "success": True,
+            "deleted_chat_id": deleted[0]
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
