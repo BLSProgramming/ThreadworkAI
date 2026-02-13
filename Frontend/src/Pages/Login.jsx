@@ -28,7 +28,7 @@ function Login() {
       const data = await res.json();
 
       if (res.ok) {
-        // After successful login, check whether the profile is complete
+
         try {
           const profileRes = await fetch('/api/check-profile', { credentials: 'include' });
           const profileData = await profileRes.json();

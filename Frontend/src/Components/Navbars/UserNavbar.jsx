@@ -137,8 +137,22 @@ function UserNavbar({ isOpen = true, onToggle }) {
     setConfirmDialog({ isOpen: true, type: 'delete', chatId });
   };
 
-  const confirmDeleteChat = () => {
+  const confirmDeleteChat = async () => {
     const { chatId: deleteChatId } = confirmDialog;
+    
+    const backendId = deleteChatId?.replace('chat-', '');
+    
+    try {
+      await fetch(`/api/chats/${backendId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      console.error('Failed to delete chat from backend:', error);
+    }
+
+    // Remove from local state regardless
     setChats((prev) => prev.filter(chat => chat.id !== deleteChatId));
     
     // If deleting current chat, navigate to home
