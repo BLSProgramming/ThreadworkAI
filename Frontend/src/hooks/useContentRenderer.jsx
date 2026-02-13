@@ -2,7 +2,74 @@ import { useRef, useEffect, useState } from 'react';
 import Prism from 'prismjs';
 import 'prismjs/components/prism-python';
 import 'prismjs/themes/prism-tomorrow.css';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 import { extractYouTubeId, parseMarkdownTable } from '../utils/contentFormatting';
+
+/**
+ * Render LaTeX math delimiters in a string.
+ * Supports \(...\) for inline and \[...\] for display math.
+ * Also supports $...$ for inline and $$...$$ for display math.
+ * Returns an array of React elements / strings.
+ */
+const renderMath = (text) => {
+  // Pattern matches: $$...$$, \[...\], \(...\), $...$
+  const mathRegex = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\((.+?)\\\)|\$([^$\n]+?)\$/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = mathRegex.exec(text)) !== null) {
+    // Text before this math segment
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    const displayContent = match[1] || match[2]; // $$...$$ or \[...\]
+    const inlineContent = match[3] || match[4];   // \(...\) or $...$
+
+    try {
+      if (displayContent) {
+        parts.push(
+          <span
+            key={`math-${match.index}`}
+            className="block my-3 text-center overflow-x-auto"
+            dangerouslySetInnerHTML={{
+              __html: katex.renderToString(displayContent.trim(), {
+                displayMode: true,
+                throwOnError: false,
+              }),
+            }}
+          />
+        );
+      } else {
+        parts.push(
+          <span
+            key={`math-${match.index}`}
+            dangerouslySetInnerHTML={{
+              __html: katex.renderToString(inlineContent.trim(), {
+                displayMode: false,
+                throwOnError: false,
+              }),
+            }}
+          />
+        );
+      }
+    } catch {
+      // If KaTeX fails, show the raw text
+      parts.push(match[0]);
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Remaining text after last match
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : [text];
+};
 
 /**
  * Hook for rendering formatted content with syntax highlighting, tables, and embeds
@@ -112,14 +179,14 @@ export const useContentRenderer = () => {
     );
   };
 
-  // Render inline bold text
+  // Render inline bold text (with math support)
   const renderInlineBold = (str) => {
     const parts = str.split(/(\*\*[^*]+\*\*)/g);
     return parts.map((part, i) => {
       if (part.startsWith('**') && part.endsWith('**')) {
-        return <strong key={`bold-${i}`}>{part.slice(2, -2)}</strong>;
+        return <strong key={`bold-${i}`}>{renderMath(part.slice(2, -2))}</strong>;
       }
-      return part;
+      return <span key={`txt-${i}`}>{renderMath(part)}</span>;
     });
   };
 
@@ -292,6 +359,11 @@ export const useContentRenderer = () => {
             <span>{renderTextWithLinks(bulletMatch[1])}</span>
           </div>
         );
+      }
+
+      // Check for display math blocks (\[...\] or $$...$$) as standalone lines
+      if (/^\\\[/.test(trimmed) || /^\$\$/.test(trimmed)) {
+        return <div key={key} className="text-sm text-gray-800 mb-2">{renderMath(trimmed)}</div>;
       }
 
       return (
