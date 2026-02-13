@@ -3,7 +3,7 @@
  * @param {string} message - User message
  * @param {array} models - Selected models
  * @param {function} onModelResponse - Callback when a model response arrives
- * @param {function} onSynthesis - Callback when synthesis response arrives
+ * @param {function} onSynthesisChunk - Callback for each synthesis token
  * @param {function} onDone - Callback when stream is complete
  * @param {function} onError - Callback on error
  */
@@ -11,7 +11,7 @@ export async function streamChat(
   message,
   models,
   onModelResponse,
-  onSynthesis,
+  onSynthesisChunk,
   onDone,
   onError,
   signal
@@ -54,8 +54,13 @@ export async function streamChat(
 
             if (event.type === 'model_response') {
               onModelResponse(event.data);
+            } else if (event.type === 'synthesis_chunk') {
+              onSynthesisChunk(event.data);
             } else if (event.type === 'synthesis') {
-              onSynthesis(event.data);
+              // Legacy: full synthesis in one event
+              onSynthesisChunk(event.data);
+            } else if (event.type === 'synthesis_done') {
+              // Synthesis streaming complete — no action needed
             } else if (event.type === 'done') {
               onDone();
             }

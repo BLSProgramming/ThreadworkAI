@@ -399,9 +399,11 @@ function HomePage() {
           });
         },
   
-        (synthesisData) => {
-          const { response } = synthesisData;
-          synthesisMs = performance.now() - startTs;
+        // onSynthesisChunk — accumulate streamed synthesis tokens
+        (chunk) => {
+          if (synthesisMs === null) {
+            synthesisMs = performance.now() - startTs;
+          }
 
           setMessages((currentMessages) => {
             const existingBot = currentMessages.find(
@@ -413,7 +415,7 @@ function HomePage() {
                 m.sender === 'bot' && m.id === userMessage.id + 1
                   ? {
                       ...m,
-                      text: response,
+                      text: (m.text || '') + chunk,
                       allResponses: allResponses,
                     }
                   : m
@@ -423,7 +425,7 @@ function HomePage() {
             // If no bot message exists yet (edge case), create it now
             const newBotMessage = {
               id: userMessage.id + 1,
-              text: response,
+              text: chunk,
               sender: 'bot',
               model: 'Threadwork AI',
               allResponses: allResponses,
